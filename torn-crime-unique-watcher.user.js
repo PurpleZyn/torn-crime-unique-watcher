@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.1.1
+// @version      0.1.2
 // @description  Alerts when Torn marks a Shoplifting or Pickpocketing unique outcome as available.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -21,6 +21,8 @@
 
     var PREFIX = 'tcuw';
     var soundOn = localStorage.getItem(PREFIX + '-sound') !== '0';
+    var storedVolume = parseFloat(localStorage.getItem(PREFIX + '-volume'));
+    var volume = Number.isFinite(storedVolume) ? Math.min(1, Math.max(.25, storedVolume)) : .75;
     var observer = null;
     var timer = null;
     var active = new Set();
@@ -66,13 +68,30 @@
         if (!p) {
             p = document.createElement('div');
             p.id = PREFIX + '-pill';
-            p.title = 'Click to toggle sound. Shift-click to test the alert.';
+            p.title = 'Click: mute/unmute • Shift-click: test alert • Ctrl-click: change volume';
             p.addEventListener('click', function (e) {
                 primeAudio();
+
                 if (e.shiftKey) {
-                    alertUser(crime() || 'Crime', 'Test alert — watcher is working.');
+                    alertUser(
+                        crime() || 'Crime',
+                        'Test alert — sound is ' + Math.round(volume * 100) + '%.',
+                        true
+                    );
                     return;
                 }
+
+                if (e.ctrlKey) {
+                    cycleVolume();
+                    updatePill();
+                    alertUser(
+                        crime() || 'Crime',
+                        'Alert volume set to ' + Math.round(volume * 100) + '%.',
+                        true
+                    );
+                    return;
+                }
+
                 soundOn = !soundOn;
                 localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
                 updatePill();
@@ -88,7 +107,7 @@
         var c = crime();
         var armed = !!c && foreground();
         p.classList.toggle('paused', !armed);
-        p.textContent = '★ ' + (armed ? c + ' watcher armed' : 'Unique watcher paused') + (soundOn ? ' 🔊' : ' 🔇');
+        p.textContent = '★ ' + (armed ? c + ' watcher armed' : 'Unique watcher paused') + (soundOn ? ' 🔊 ' + Math.round(volume * 100) + '%' : ' 🔇');
     }
 
     function removeUi() {
@@ -96,32 +115,72 @@
         if (p) p.remove();
     }
 
+    function cycleVolume() {
+        var levels = [.25, .50, .75, 1];
+        var index = levels.findIndex(function (level) {
+            return Math.abs(level - volume) < .01;
+        });
+
+        volume = levels[(index + 1) % levels.length];
+        localStorage.setItem(PREFIX + '-volume', String(volume));
+    }
+
     function primeAudio() {
         try {
             var AC = window.AudioContext || window.webkitAudioContext;
-            if (!AC) return;
+            if (!AC) return Promise.resolve(null);
+
             if (!audio) audio = new AC();
-            if (audio.state === 'suspended') audio.resume().catch(function () {});
-        } catch (_) {}
+
+            if (audio.state === 'running') {
+                return Promise.resolve(audio);
+            }
+
+            return audio.resume()
+                .then(function () { return audio; })
+                .catch(function () { return null; });
+        } catch (_) {
+            return Promise.resolve(null);
+        }
     }
 
-    function beep() {
-        if (!soundOn || !foreground()) return;
-        try {
-            primeAudio();
-            if (!audio || audio.state !== 'running') return;
-            [760, 1040].forEach(function (hz, i) {
-                var o = audio.createOscillator();
-                var g = audio.createGain();
-                var start = audio.currentTime + i * .16;
-                o.frequency.value = hz;
-                g.gain.setValueAtTime(.0001, start);
-                g.gain.exponentialRampToValueAtTime(.2, start + .015);
-                g.gain.exponentialRampToValueAtTime(.0001, start + .13);
-                o.connect(g); g.connect(audio.destination);
-                o.start(start); o.stop(start + .15);
-            });
-        } catch (_) {}
+    function beep(force) {
+        if ((!soundOn && !force) || !foreground()) {
+            return Promise.resolve(false);
+        }
+
+        return primeAudio().then(function (ctx) {
+            if (!ctx || ctx.state !== 'running') return false;
+
+            try {
+                [
+                    { hz: 660, at: 0.00, length: .14 },
+                    { hz: 880, at: 0.17, length: .14 },
+                    { hz: 1100, at: 0.34, length: .20 }
+                ].forEach(function (tone) {
+                    var o = ctx.createOscillator();
+                    var g = ctx.createGain();
+                    var start = ctx.currentTime + tone.at;
+                    var peak = Math.max(.03, volume * .42);
+
+                    o.type = 'sine';
+                    o.frequency.setValueAtTime(tone.hz, start);
+
+                    g.gain.setValueAtTime(.0001, start);
+                    g.gain.exponentialRampToValueAtTime(peak, start + .015);
+                    g.gain.exponentialRampToValueAtTime(.0001, start + tone.length);
+
+                    o.connect(g);
+                    g.connect(ctx.destination);
+                    o.start(start);
+                    o.stop(start + tone.length + .03);
+                });
+
+                return true;
+            } catch (_) {
+                return false;
+            }
+        });
     }
 
     function toast(c, detail) {
@@ -144,9 +203,11 @@
         setTimeout(function () { if (f.isConnected) f.remove(); }, 1500);
     }
 
-    function alertUser(c, detail) {
+    function alertUser(c, detail, forceSound) {
         if (!foreground()) return;
-        beep(); flash(); toast(c, detail);
+        beep(!!forceSound);
+        flash();
+        toast(c, detail);
     }
 
     function isVisible(el) {
