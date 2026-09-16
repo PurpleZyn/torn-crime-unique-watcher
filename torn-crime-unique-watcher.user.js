@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.2
+// @version      0.3.3
 // @description  Search for Cash + Shoplifting API alerts, live unique detection, draggable/minimizable status pill.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -643,6 +643,7 @@
 
         return 'Connected.\n' +
             'Shoplifting: skill ' + apiProfile.skill + ' · ' + apiProfile.completedCount + ' / ' + apiProfile.total + ' uniques · ' + slRemaining + ' missing\n' +
+            'SL time-window uniques recognized as completed: ' + apiProfile.matchedKeys.size + ' / ' + SHOP_RULES.length + '\n' +
             'Search for Cash: skill ' + sfcProfile.skill + ' · ' + sfcProfile.completedCount + ' / ' + sfcProfile.total + ' uniques · ' + sfcRemaining + ' missing\n' +
             'SFC time-window uniques recognized as completed: ' + sfcProfile.matchedKeys.size + ' / ' + SFC_RULES.length + '\n' +
             'Polling every: ' + pollSeconds + ' seconds';
@@ -848,16 +849,39 @@
 
     function matchCompletedRules(uniques, itemNames, rules) {
         var matched = new Set();
-        var descriptors = uniques.map(function (u) { return userRewardDescriptor(u.rewards, itemNames); });
+        var descriptors = uniques.map(function (u) {
+            return {
+                id: u.id,
+                reward: userRewardDescriptor(u.rewards, itemNames)
+            };
+        });
 
         rules.forEach(function (rule) {
-            var target = ruleRewardDescriptor(rule);
-            var idx = descriptors.findIndex(function (d) { return rewardMatches(d, target); });
+            var idx = -1;
+
+            // Torn's unique reward schema exposes items, money and ammo, but not
+            // points. Shoplifting currently has one time-window unique whose reward
+            // is points: Cyber Force's 3-9 Points result. A completed version of
+            // that unique therefore appears as a unique with no supported reward
+            // payload. Treat that lone rewardless Shoplifting unique as the points
+            // completion instead of permanently assuming the player still needs it.
+            if (rule.key === 'cyber-points') {
+                idx = descriptors.findIndex(function (d) {
+                    return d.reward && d.reward.type === 'zero';
+                });
+            } else {
+                var target = ruleRewardDescriptor(rule);
+                idx = descriptors.findIndex(function (d) {
+                    return rewardMatches(d.reward, target);
+                });
+            }
+
             if (idx !== -1) {
                 matched.add(rule.key);
                 descriptors.splice(idx, 1);
             }
         });
+
         return matched;
     }
 
