@@ -397,14 +397,11 @@
         if (!apiProfile) return 'API key saved. Waiting to sync…';
         var remaining = Math.max(0, apiProfile.total - apiProfile.completedCount);
         var matched = apiProfile.matchedKeys.size;
-        var text = 'Connected.\nShoplifting skill: ' + apiProfile.skill +
+        return 'Connected.\nShoplifting skill: ' + apiProfile.skill +
             '\nCompleted uniques: ' + apiProfile.completedCount + ' / ' + apiProfile.total +
-            '\nReward-matched for filtering: ' + matched + ' / ' + apiProfile.completedCount +
-            '\nStill missing: ' + remaining;
-        if (matched < apiProfile.completedCount) {
-            text += '\n\nNote: not every completed unique could be reward-matched. The watcher errs on the side of extra alerts rather than hiding a real opportunity.';
-        }
-        return text;
+            '\nSecurity-window uniques recognized as completed: ' + matched +
+            '\nStill missing overall: ' + remaining +
+            '\nPolling every: ' + pollSeconds + ' seconds';
     }
 
     function apiGet(path) {
@@ -748,7 +745,12 @@
     refreshLifecycle();
 
     if (getKey()) {
-        syncApiProfile(false).finally(startApiMonitor);
+        syncApiProfile(false)
+            .catch(function (err) {
+                apiLastError = err.message || String(err);
+                updatePill();
+            })
+            .finally(startApiMonitor);
     } else {
         updatePill();
     }
