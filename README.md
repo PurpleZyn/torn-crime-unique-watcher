@@ -9,7 +9,7 @@ A lightweight Torn userscript with two different unique watchers:
 
 ### Tampermonkey
 
-[Install v0.2.0](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.2.0.user.js)
+[Install v0.2.1](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.2.0.user.js)
 
 The versioned installer is provided to avoid stale GitHub raw-file caching. Future updates still point at the normal stable userscript path.
 
@@ -67,6 +67,9 @@ The watcher pill is available throughout Torn in v0.2.0.
 - **Shift + Click:** test the flash and alert sound
 - **Ctrl + Click:** cycle volume through 25%, 50%, 75%, and 100%
 - **Alt + Click:** open Shoplifting API settings
+- **Drag:** move the watcher pill anywhere on screen
+
+The API settings window also includes **Reset Pill Position** to return it to the bottom-right.
 
 Before an API key is configured, normal click opens API setup.
 
@@ -82,7 +85,7 @@ The script:
 
 ## Current version
 
-**v0.2.0**
+**v0.2.1**
 
 v0.2.0 adds the hybrid Shoplifting API watcher while preserving the v0.1.2 live-page Pickpocketing watcher, sound controls, and strict `unique-outcome-star` detection.
 
