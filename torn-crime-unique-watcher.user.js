@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.3
-// @description  Search for Cash + Shoplifting API alerts, live unique detection, draggable/minimizable status pill.
+// @version      0.3.4
+// @description  Search for Cash + Shoplifting API alerts, live unique detection, draggable/collapsible watcher.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -199,11 +199,13 @@
         s.id = PREFIX + '-style';
         s.textContent =
             '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;display:flex;align-items:center;gap:7px;padding:8px 9px 8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:move;box-shadow:0 4px 15px #0008;user-select:none;touch-action:none}' +
-            '#tcuw-pill-label{white-space:nowrap}' +
-            '#tcuw-pill-toggle{width:22px;height:22px;padding:0!important;border:0!important;border-radius:50%;background:#ffffff12!important;color:#ddd!important;font:700 14px/22px Arial!important;cursor:pointer!important}' +
-            '#tcuw-pill.mini{padding:5px;border-radius:50%;gap:0}' +
-            '#tcuw-pill.mini #tcuw-pill-label{display:none}' +
-            '#tcuw-pill.mini #tcuw-pill-toggle{width:28px;height:28px;line-height:28px;background:transparent!important;color:#ffd15a!important}' +
+            '#tcuw-pill-label{white-space:nowrap;cursor:pointer}' +
+            '#tcuw-pill-controls{display:flex;align-items:center;gap:4px}' +
+            '#tcuw-pill .tcuw-pill-btn{width:24px;height:24px;padding:0!important;border:0!important;border-radius:50%;background:#ffffff12!important;color:#ddd!important;font:700 13px/24px Arial!important;cursor:pointer!important}' +
+            '#tcuw-pill .tcuw-pill-btn:hover{background:#ffffff24!important;color:#fff!important}' +
+            '#tcuw-pill.mini{padding:5px 9px;border-radius:50%;gap:0}' +
+            '#tcuw-pill.mini #tcuw-pill-label{display:inline;font-size:17px;color:#ffd15a}' +
+            '#tcuw-pill.mini #tcuw-pill-controls{display:none}' +
             '#tcuw-pill.warn{border-color:#d76b55}' +
             '#tcuw-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2147483647;width:min(560px,calc(100vw - 28px));padding:14px;border:1px solid #f0be36;border-radius:9px;background:#17171af7;color:#fff;text-align:center;font:600 14px Arial;box-shadow:0 8px 28px #000a}' +
             '#tcuw-toast b{color:#ffd75e}#tcuw-toast span{display:block;margin-top:5px;font-weight:400;white-space:pre-line}' +
@@ -231,30 +233,45 @@
         var label = document.createElement('span');
         label.id = PREFIX + '-pill-label';
 
-        var toggle = document.createElement('button');
-        toggle.id = PREFIX + '-pill-toggle';
-        toggle.type = 'button';
-        toggle.title = 'Minimize / expand watcher';
-        toggle.addEventListener('click', function (e) {
+        var controls = document.createElement('span');
+        controls.id = PREFIX + '-pill-controls';
+
+        var soundBtn = document.createElement('button');
+        soundBtn.type = 'button';
+        soundBtn.id = PREFIX + '-pill-sound';
+        soundBtn.className = 'tcuw-pill-btn';
+        soundBtn.title = 'Mute / unmute alerts';
+        soundBtn.addEventListener('pointerdown', function (e) {
             e.stopPropagation();
-
-            if (suppressPillClick) {
-                suppressPillClick = false;
-                return;
-            }
-
-            pillMinimized = !pillMinimized;
-            localStorage.setItem(PREFIX + '-pill-minimized', pillMinimized ? '1' : '0');
+        });
+        soundBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            primeAudio();
+            soundOn = !soundOn;
+            localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
             updatePill();
-            clampPillToViewport(p);
         });
 
-        p.append(label, toggle);
+        var settingsBtn = document.createElement('button');
+        settingsBtn.type = 'button';
+        settingsBtn.id = PREFIX + '-pill-settings';
+        settingsBtn.className = 'tcuw-pill-btn';
+        settingsBtn.textContent = '⚙';
+        settingsBtn.title = 'Watcher settings';
+        settingsBtn.addEventListener('pointerdown', function (e) {
+            e.stopPropagation();
+        });
+        settingsBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSettings();
+        });
+
+        controls.append(soundBtn, settingsBtn);
+        p.append(label, controls);
+
         p.addEventListener('pointerdown', beginPillDrag);
 
         p.addEventListener('click', function (e) {
-            if (e.target === toggle) return;
-
             if (suppressPillClick) {
                 suppressPillClick = false;
                 return;
@@ -262,18 +279,16 @@
 
             primeAudio();
 
-            if (!getKey() && !e.shiftKey && !e.ctrlKey) {
-                openSettings();
-                return;
-            }
             if (e.altKey) {
                 openSettings();
                 return;
             }
+
             if (e.shiftKey) {
                 alertUser('TEST ALERT', 'Watcher sound is ' + Math.round(volume * 100) + '%.', true, false);
                 return;
             }
+
             if (e.ctrlKey) {
                 cycleVolume();
                 updatePill();
@@ -281,9 +296,11 @@
                 return;
             }
 
-            soundOn = !soundOn;
-            localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
+            // Normal click is now dedicated to minimize / expand.
+            pillMinimized = !pillMinimized;
+            localStorage.setItem(PREFIX + '-pill-minimized', pillMinimized ? '1' : '0');
             updatePill();
+            clampPillToViewport(p);
         });
 
         document.body.appendChild(p);
@@ -425,15 +442,21 @@
         parts.push(soundOn ? '🔊 ' + Math.round(volume * 100) + '%' : '🔇');
 
         var label = document.getElementById(PREFIX + '-pill-label');
-        var toggle = document.getElementById(PREFIX + '-pill-toggle');
+        var soundBtn = document.getElementById(PREFIX + '-pill-sound');
 
-        if (label) label.textContent = '★ ' + parts.join(' • ');
-        if (toggle) toggle.textContent = pillMinimized ? '★' : '−';
+        if (label) {
+            label.textContent = pillMinimized ? '★' : '★ ' + parts.join(' • ');
+        }
+
+        if (soundBtn) {
+            soundBtn.textContent = soundOn ? '🔊' : '🔇';
+            soundBtn.title = soundOn ? 'Mute alerts' : 'Unmute alerts';
+        }
 
         p.classList.toggle('mini', pillMinimized);
         p.title = pillMinimized
-            ? 'Drag to move • Click ★ to expand'
-            : 'Drag to move • Click: mute/unmute • Shift-click: test • Ctrl-click: volume • Alt-click: API settings';
+            ? 'Click to expand • Drag to move'
+            : 'Click status bar to minimize • Drag to move • Shift-click: test • Ctrl-click: volume • Alt-click: settings';
     }
 
     function cycleVolume() {
