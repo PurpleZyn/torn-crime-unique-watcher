@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.2.0
+// @version      0.2.1
 // @description  Pickpocketing live unique watcher + personalized Shoplifting API alerts anywhere on Torn.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -39,6 +39,9 @@
     var apiProfile = null;
     var apiLastError = '';
     var apiLastCheck = 0;
+
+    var pillDragging = false;
+    var suppressPillClick = false;
 
     /*
      * Only security-dependent Shoplifting uniques are included here.
@@ -138,7 +141,7 @@
         var s = document.createElement('style');
         s.id = PREFIX + '-style';
         s.textContent =
-            '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;padding:8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:pointer;box-shadow:0 4px 15px #0008;user-select:none}' +
+            '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;padding:8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:move;box-shadow:0 4px 15px #0008;user-select:none;touch-action:none}' +
             '#tcuw-pill.warn{border-color:#d76b55}' +
             '#tcuw-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2147483647;width:min(560px,calc(100vw - 28px));padding:14px;border:1px solid #f0be36;border-radius:9px;background:#17171af7;color:#fff;text-align:center;font:600 14px Arial;box-shadow:0 8px 28px #000a}' +
             '#tcuw-toast b{color:#ffd75e}#tcuw-toast span{display:block;margin-top:5px;font-weight:400;white-space:pre-line}' +
@@ -161,7 +164,16 @@
 
         p = document.createElement('div');
         p.id = PREFIX + '-pill';
+        restorePillPosition(p);
+
+        p.addEventListener('pointerdown', beginPillDrag);
+
         p.addEventListener('click', function (e) {
+            if (suppressPillClick) {
+                suppressPillClick = false;
+                return;
+            }
+
             primeAudio();
 
             if (!getKey() && !e.shiftKey && !e.ctrlKey) {
@@ -187,8 +199,108 @@
             localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
             updatePill();
         });
+
         document.body.appendChild(p);
+        clampPillToViewport(p);
         return p;
+    }
+
+    function beginPillDrag(e) {
+        if (e.button !== 0) return;
+
+        var p = e.currentTarget;
+        var rect = p.getBoundingClientRect();
+        var startX = e.clientX;
+        var startY = e.clientY;
+        var originLeft = rect.left;
+        var originTop = rect.top;
+        var moved = false;
+
+        pillDragging = true;
+        p.setPointerCapture(e.pointerId);
+
+        function move(ev) {
+            var dx = ev.clientX - startX;
+            var dy = ev.clientY - startY;
+
+            if (!moved && Math.hypot(dx, dy) >= 5) moved = true;
+            if (!moved) return;
+
+            var maxLeft = Math.max(0, window.innerWidth - p.offsetWidth);
+            var maxTop = Math.max(0, window.innerHeight - p.offsetHeight);
+            var left = Math.min(maxLeft, Math.max(0, originLeft + dx));
+            var top = Math.min(maxTop, Math.max(0, originTop + dy));
+
+            p.style.left = left + 'px';
+            p.style.top = top + 'px';
+            p.style.right = 'auto';
+            p.style.bottom = 'auto';
+        }
+
+        function end(ev) {
+            try { p.releasePointerCapture(ev.pointerId); } catch (_) {}
+            p.removeEventListener('pointermove', move);
+            p.removeEventListener('pointerup', end);
+            p.removeEventListener('pointercancel', end);
+            pillDragging = false;
+
+            if (moved) {
+                suppressPillClick = true;
+                savePillPosition(p);
+                setTimeout(function () { suppressPillClick = false; }, 250);
+            }
+        }
+
+        p.addEventListener('pointermove', move);
+        p.addEventListener('pointerup', end);
+        p.addEventListener('pointercancel', end);
+    }
+
+    function savePillPosition(p) {
+        var rect = p.getBoundingClientRect();
+        localStorage.setItem(PREFIX + '-pill-position', JSON.stringify({
+            left: Math.round(rect.left),
+            top: Math.round(rect.top)
+        }));
+    }
+
+    function restorePillPosition(p) {
+        try {
+            var raw = localStorage.getItem(PREFIX + '-pill-position');
+            if (!raw) return;
+            var pos = JSON.parse(raw);
+            if (!Number.isFinite(pos.left) || !Number.isFinite(pos.top)) return;
+
+            p.style.left = pos.left + 'px';
+            p.style.top = pos.top + 'px';
+            p.style.right = 'auto';
+            p.style.bottom = 'auto';
+        } catch (_) {}
+    }
+
+    function clampPillToViewport(p) {
+        if (!p || !p.isConnected) return;
+        var rect = p.getBoundingClientRect();
+        var left = Math.min(Math.max(0, rect.left), Math.max(0, window.innerWidth - p.offsetWidth));
+        var top = Math.min(Math.max(0, rect.top), Math.max(0, window.innerHeight - p.offsetHeight));
+
+        if (p.style.left || p.style.top) {
+            p.style.left = left + 'px';
+            p.style.top = top + 'px';
+            p.style.right = 'auto';
+            p.style.bottom = 'auto';
+            savePillPosition(p);
+        }
+    }
+
+    function resetPillPosition() {
+        localStorage.removeItem(PREFIX + '-pill-position');
+        var p = document.getElementById(PREFIX + '-pill');
+        if (!p) return;
+        p.style.left = '';
+        p.style.top = '';
+        p.style.right = '12px';
+        p.style.bottom = '12px';
     }
 
     function updatePill() {
@@ -216,7 +328,7 @@
 
         parts.push(soundOn ? '🔊 ' + Math.round(volume * 100) + '%' : '🔇');
         p.textContent = '★ ' + parts.join(' • ');
-        p.title = 'Click: mute/unmute • Shift-click: test • Ctrl-click: volume • Alt-click: API settings';
+        p.title = 'Drag to move • Click: mute/unmute • Shift-click: test • Ctrl-click: volume • Alt-click: API settings';
     }
 
     function cycleVolume() {
@@ -380,11 +492,18 @@
             updatePill();
         });
 
+        var resetPos = document.createElement('button');
+        resetPos.textContent = 'Reset Pill Position';
+        resetPos.addEventListener('click', function () {
+            resetPillPosition();
+            status.textContent = settingsStatusText() + '\n\nPill position reset to bottom-right.';
+        });
+
         var close = document.createElement('button');
         close.textContent = 'Close';
         close.addEventListener('click', function () { back.remove(); });
 
-        row.append(save, clear, close);
+        row.append(save, clear, resetPos, close);
         modal.append(h, intro, keyLabel, keyInput, pollLabel, poll, apiLink, status, row);
         back.appendChild(modal);
         back.addEventListener('click', function (e) { if (e.target === back) back.remove(); });
@@ -399,7 +518,7 @@
         var matched = apiProfile.matchedKeys.size;
         return 'Connected.\nShoplifting skill: ' + apiProfile.skill +
             '\nCompleted uniques: ' + apiProfile.completedCount + ' / ' + apiProfile.total +
-            '\nSecurity-window uniques recognized as completed: ' + matched +
+            '\nTime-window uniques recognized as completed: ' + matched +
             '\nStill missing overall: ' + remaining +
             '\nPolling every: ' + pollSeconds + ' seconds';
     }
@@ -519,9 +638,15 @@
     function rewardMatches(a, b) {
         if (!a || !b || a.type !== b.type) return false;
         if (a.type === 'items') return a.sig === b.sig;
-        if (a.type === 'money') return Number(a.min) === Number(b.min) && Number(a.max) === Number(b.max);
+        if (a.type === 'money') {
+            var minClose = Math.abs(Number(a.min) - Number(b.min)) <= 1000;
+            var maxClose = Math.abs(Number(a.max) - Number(b.max)) <= 1000;
+            return minClose && maxClose;
+        }
         if (a.type === 'ammo') return Number(a.amount) === Number(b.amount) && norm(a.ammoType).indexOf(norm(b.ammoType)) !== -1;
-        if (a.type === 'zero') return true;
+        // Rewards such as points are not represented distinctly enough in this
+        // endpoint to identify a specific unique safely.
+        if (a.type === 'zero') return false;
         return false;
     }
 
@@ -562,6 +687,15 @@
         return '';
     }
 
+    function isTransientSecurityRule(rule) {
+        // Background alerts are meant for short-lived opportunities. If every
+        // required security state is "enabled/on duty" (false), the outcome is
+        // available during the normal baseline state and does not need an alert.
+        return Object.keys(rule.security).some(function (k) {
+            return rule.security[k] === true;
+        });
+    }
+
     function checkShopliftingApi() {
         if (!getKey() || apiChecking) return Promise.resolve();
         apiChecking = true;
@@ -579,6 +713,7 @@
                 var state = shopState(entry);
 
                 SHOP_RULES.forEach(function (rule) {
+                    if (!isTransientSecurityRule(rule)) return;
                     if (norm(rule.shop) !== norm(shop)) return;
                     if (apiProfile.skill < rule.skill) return;
                     if (apiProfile.matchedKeys.has(rule.key)) return;
@@ -732,6 +867,9 @@
     window.addEventListener('blur', refreshLifecycle);
     window.addEventListener('hashchange', refreshLifecycle);
     window.addEventListener('popstate', refreshLifecycle);
+    window.addEventListener('resize', function () {
+        clampPillToViewport(document.getElementById(PREFIX + '-pill'));
+    });
 
     setInterval(function () {
         if (location.href !== lastUrl) {
