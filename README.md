@@ -34,6 +34,7 @@ A small watcher pill appears in the lower-right corner on supported crime pages.
 
 - **Click:** toggle alert sound
 - **Shift + Click:** test the flash, sound, and popup
+- **Ctrl + Click:** cycle alert volume through 25%, 50%, 75%, and 100%
 
 The pill will show either:
 
@@ -60,9 +61,9 @@ The userscript includes `@updateURL` and `@downloadURL` metadata pointing at thi
 
 ## Current version
 
-**v0.1.1**
+**v0.1.2**
 
-v0.1.1 fixes a false positive where Torn's overall unique-progress display (for example, 53 / 58) could be mistaken for an available unique. Detection now keys specifically off Torn's actual `unique-outcome-star` element.
+v0.1.2 keeps the strict `unique-outcome-star` detection from v0.1.1 and fixes browser audio initialization so the test alert reliably waits for the Web Audio context to resume. It also adds 25% / 50% / 75% / 100% volume control via Ctrl-click.
 
 ## Disclaimer
 
