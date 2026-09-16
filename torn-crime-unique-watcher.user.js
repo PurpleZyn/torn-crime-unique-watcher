@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.2.1
-// @description  Pickpocketing live unique watcher + personalized Shoplifting API alerts anywhere on Torn.
+// @version      0.3.0
+// @description  Search for Cash + Shoplifting API unique-window alerts, plus live Pickpocketing unique detection.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -39,6 +39,11 @@
     var apiProfile = null;
     var apiLastError = '';
     var apiLastCheck = 0;
+
+    var sfcProfile = null;
+    var sfcActive = new Set();
+    var sfcLastError = '';
+    var sfcLastCheck = 0;
 
     var pillDragging = false;
     var suppressPillClick = false;
@@ -104,6 +109,55 @@
         R('al-heg', "Big Al's Gun Shop", 80, 'HEG x8', {camera:false,guard:false}, I('HEG',8))
     ];
 
+    /*
+     * Time-sensitive Search for Cash uniques.
+     * The official /torn/searchforcash endpoint returns the current percentage
+     * for each Search for Cash location. These thresholds follow Torn's current
+     * documented unique conditions.
+     */
+    var SFC_RULES = [
+        SR('sfc-subway-glasses', 'Search the Subway', 1, 'Glasses', 75, 100, I('Glasses',1), 'Rush hour (75%+ ridership)'),
+        SR('sfc-subway-wallet', 'Search the Subway', 1, 'Torn City Times + Zip Wallet', 0, 23, IS([['Torn City Times',1],['Zip Wallet',1]]), 'Off-peak (23% or lower ridership)'),
+        SR('sfc-subway-drugs', 'Search the Subway', 30, '3 Ecstasy + 2 LSD', 75, 100, IS([['Ecstasy',3],['LSD',2]]), 'Rush hour (75%+ ridership)'),
+        SR('sfc-subway-laptop', 'Search the Subway', 50, 'Laptop', 50, 100, I('Laptop',1), 'On-peak / rush hour (50%+ ridership)'),
+        SR('sfc-subway-vic-xan', 'Search the Subway', 60, '3 Vicodin + Xanax', 0, 23, IS([['Vicodin',3],['Xanax',1]]), 'Off-peak (23% or lower ridership)'),
+
+        SR('sfc-junk-bike', 'Search the Junkyard', 5, 'Mountain Bike', 0, 49, I('Mountain Bike',1), '49% or lower crushing rating'),
+        SR('sfc-junk-sprays', 'Search the Junkyard', 30, 'Spray Can bundle', 0, 75, IS([['Spray Can: Black',4],['Spray Can: Red',3],['Spray Can: White',3]]), '75% or lower crushing rating'),
+        SR('sfc-junk-kevlar', 'Search the Junkyard', 40, 'Kevlar Gloves', 50, 100, I('Kevlar Gloves',1), '50% or higher crushing rating'),
+        SR('sfc-junk-stash', 'Search the Junkyard', 40, 'Stash Box', 75, 100, I('Stash Box',1), '75% or higher crushing rating'),
+        SR('sfc-junk-hsd', 'Search the Junkyard', 60, 'High-Speed Drive', 0, 23, I('High-Speed Drive',1), '23% or lower crushing rating'),
+        SR('sfc-junk-cash', 'Search the Junkyard', 80, '$50,620–$79,820', 50, 75, M(50620,79820), '50%–75% crushing rating'),
+
+        SR('sfc-beach-fish', 'Search the Beach', 10, 'Fishing Rod + Trout', 60, 100, IS([['Fishing Rod',1],['Trout',1]]), '60% or higher tide rating · requires Metal Detector'),
+        SR('sfc-beach-party', 'Search the Beach', 10, 'Beer + shades + blanket bundle', 60, 100, IS([['Bottle of Beer',6],['Sports Shades',5],['Proda Sunglasses',4],['Blanket',1]]), '60% or higher tide rating · requires Metal Detector'),
+        SR('sfc-beach-firstaid', 'Search the Beach', 20, 'First Aid Kit x2', 60, 100, I('First Aid Kit',2), '60% or higher tide rating · requires Metal Detector'),
+        SR('sfc-beach-coconut', 'Search the Beach', 50, 'Coconut Bra', 0, 40, I('Coconut Bra',1), '40% or lower tide rating · requires Metal Detector'),
+        SR('sfc-beach-dive', 'Search the Beach', 66, 'Diving gear bundle', 0, 40, IS([['Snorkel',1],['Flippers',1],['Wetsuit',1],['Diving Gloves',1]]), '40% or lower tide rating · requires Metal Detector'),
+        SR('sfc-beach-sextant', 'Search the Beach', 90, 'Sextant', 40, 100, I('Sextant',1), '40% or higher tide rating · requires Metal Detector'),
+        SR('sfc-beach-bead', 'Search the Beach', 95, 'Silver Bead', 0, 40, I('Silver Bead',1), '40% or lower tide rating · requires Metal Detector'),
+
+        SR('sfc-cemetery-speed', 'Search the Cemetery', 80, 'Speed x3', 75, 100, I('Speed',3), 'Groundskeeping inactive · requires Cemetery Key'),
+        SR('sfc-cemetery-wreath', 'Search the Cemetery', 80, 'Golden Wreath', 0, 25, I('Golden Wreath',1), 'Groundskeeping active · requires Cemetery Key'),
+        SR('sfc-cemetery-helmet', 'Search the Cemetery', 90, 'WWII Helmet', 75, 100, I('WWII Helmet',1), 'Groundskeeping inactive · requires Cemetery Key'),
+
+        SR('sfc-fountain-pcp', 'Search the Fountain', 85, 'PCP', 25, 100, I('PCP',1), '25% or higher collections rating'),
+        SR('sfc-fountain-ecstasy', 'Search the Fountain', 100, 'Ecstasy x2', 50, 100, I('Ecstasy',2), '50% or higher collections rating')
+    ];
+
+    function SR(key, location, skill, label, minPct, maxPct, reward, condition) {
+        return {
+            key:key,
+            location:location,
+            skill:skill,
+            label:label,
+            minPct:minPct,
+            maxPct:maxPct,
+            reward:reward,
+            condition:condition || ''
+        };
+    }
+
     function R(key, shop, skill, label, security, reward, note) {
         return {key:key, shop:shop, skill:skill, label:label, security:security, reward:reward, note:note || ''};
     }
@@ -117,6 +171,7 @@
         var h = (location.hash || '').toLowerCase();
         if (h.indexOf('/shoplifting') !== -1) return 'Shoplifting';
         if (h.indexOf('/pickpocketing') !== -1) return 'Pickpocketing';
+        if (h.indexOf('/searchforcash') !== -1) return 'Search for Cash';
         return null;
     }
 
@@ -310,20 +365,29 @@
 
         if (c === 'Pickpocketing') parts.push('PP ' + (foreground() ? 'armed' : 'paused'));
         else if (c === 'Shoplifting') parts.push('SL page ' + (foreground() ? 'armed' : 'paused'));
+        else if (c === 'Search for Cash') parts.push('SFC page ' + (foreground() ? 'armed' : 'paused'));
 
         if (!getKey()) {
-            parts.push('SL API setup');
+            parts.push('API setup');
             p.classList.add('warn');
-        } else if (apiLastError) {
-            parts.push('SL API error');
-            p.classList.add('warn');
-        } else if (apiProfile) {
-            var remain = Math.max(0, (apiProfile.total || 58) - (apiProfile.completedCount || 0));
-            parts.push('SL API armed · ' + remain + ' missing');
-            p.classList.remove('warn');
         } else {
-            parts.push('SL API connecting');
-            p.classList.remove('warn');
+            var hasError = !!apiLastError || !!sfcLastError;
+
+            if (apiProfile) {
+                var slRemain = Math.max(0, (apiProfile.total || 58) - (apiProfile.completedCount || 0));
+                parts.push('SL ' + slRemain + ' missing');
+            } else {
+                parts.push('SL connecting');
+            }
+
+            if (sfcProfile) {
+                var sfcRemain = Math.max(0, (sfcProfile.total || 34) - (sfcProfile.completedCount || 0));
+                parts.push('SFC ' + sfcRemain + ' missing');
+            } else {
+                parts.push('SFC connecting');
+            }
+
+            p.classList.toggle('warn', hasError);
         }
 
         parts.push(soundOn ? '🔊 ' + Math.round(volume * 100) + '%' : '🔇');
@@ -418,7 +482,7 @@
         h.textContent = 'Torn Crime Unique Watcher';
 
         var intro = document.createElement('p');
-        intro.textContent = 'Shoplifting can be monitored through Torn’s official API from anywhere on Torn. Use a Minimal Access key so the watcher can read your Shoplifting skill and completed unique outcomes. The key is stored only in this browser and is sent only to api.torn.com.';
+        intro.textContent = 'Search for Cash and Shoplifting can be monitored through Torn’s official API from anywhere on Torn. Use a Minimal Access key so the watcher can read your crime skill and completed unique outcomes. The key is stored only in this browser and is sent only to api.torn.com.';
 
         var keyLabel = document.createElement('label');
         keyLabel.textContent = 'Torn API key (Minimal Access)';
@@ -430,7 +494,7 @@
         keyInput.placeholder = 'Paste your Torn API key';
 
         var pollLabel = document.createElement('label');
-        pollLabel.textContent = 'Shoplifting check interval';
+        pollLabel.textContent = 'API check interval';
         var poll = document.createElement('select');
         poll.id = PREFIX + '-poll-select';
         [15,30,60].forEach(function (n) {
@@ -464,10 +528,12 @@
             pollSeconds = parseInt(poll.value, 10);
             localStorage.setItem(PREFIX + '-poll', String(pollSeconds));
             apiProfile = null;
+            sfcProfile = null;
             apiLastError = '';
-            status.textContent = 'Testing API and syncing your Shoplifting data…';
+            sfcLastError = '';
+            status.textContent = 'Testing API and syncing Shoplifting + Search for Cash…';
             updatePill();
-            syncApiProfile(true).then(function () {
+            syncAllProfiles(true).then(function () {
                 startApiMonitor();
                 status.textContent = settingsStatusText();
                 updatePill();
@@ -484,12 +550,26 @@
         clear.addEventListener('click', function () {
             localStorage.removeItem(PREFIX + '-api-key');
             apiProfile = null;
+            sfcProfile = null;
             apiLastError = '';
+            sfcLastError = '';
             apiActive.clear();
+            sfcActive.clear();
             stopApiMonitor();
             keyInput.value = '';
             status.textContent = 'API key cleared. Pickpocketing/page-based watching still works.';
             updatePill();
+        });
+
+        var testSfc = document.createElement('button');
+        testSfc.textContent = 'Test SFC Alert';
+        testSfc.addEventListener('click', function () {
+            alertUser(
+                'SEARCH FOR CASH UNIQUE WINDOW',
+                'Search the Beach\nSilver Bead\n40% or lower tide rating · test only',
+                true,
+                true
+            );
         });
 
         var resetPos = document.createElement('button');
@@ -503,7 +583,7 @@
         close.textContent = 'Close';
         close.addEventListener('click', function () { back.remove(); });
 
-        row.append(save, clear, resetPos, close);
+        row.append(save, clear, testSfc, resetPos, close);
         modal.append(h, intro, keyLabel, keyInput, pollLabel, poll, apiLink, status, row);
         back.appendChild(modal);
         back.addEventListener('click', function (e) { if (e.target === back) back.remove(); });
@@ -511,16 +591,20 @@
     }
 
     function settingsStatusText() {
-        if (!getKey()) return 'No API key saved. Shoplifting API monitoring is off.';
-        if (apiLastError) return 'API error: ' + apiLastError;
-        if (!apiProfile) return 'API key saved. Waiting to sync…';
-        var remaining = Math.max(0, apiProfile.total - apiProfile.completedCount);
-        var matched = apiProfile.matchedKeys.size;
-        return 'Connected.\nShoplifting skill: ' + apiProfile.skill +
-            '\nCompleted uniques: ' + apiProfile.completedCount + ' / ' + apiProfile.total +
-            '\nTime-window uniques recognized as completed: ' + matched +
-            '\nStill missing overall: ' + remaining +
-            '\nPolling every: ' + pollSeconds + ' seconds';
+        if (!getKey()) return 'No API key saved. Search for Cash + Shoplifting API monitoring is off.';
+        if (apiLastError || sfcLastError) {
+            return 'API error:\n' + [apiLastError, sfcLastError].filter(Boolean).join('\n');
+        }
+        if (!apiProfile || !sfcProfile) return 'API key saved. Waiting to sync both crimes…';
+
+        var slRemaining = Math.max(0, apiProfile.total - apiProfile.completedCount);
+        var sfcRemaining = Math.max(0, sfcProfile.total - sfcProfile.completedCount);
+
+        return 'Connected.\n' +
+            'Shoplifting: skill ' + apiProfile.skill + ' · ' + apiProfile.completedCount + ' / ' + apiProfile.total + ' uniques · ' + slRemaining + ' missing\n' +
+            'Search for Cash: skill ' + sfcProfile.skill + ' · ' + sfcProfile.completedCount + ' / ' + sfcProfile.total + ' uniques · ' + sfcRemaining + ' missing\n' +
+            'SFC time-window uniques recognized as completed: ' + sfcProfile.matchedKeys.size + ' / ' + SFC_RULES.length + '\n' +
+            'Polling every: ' + pollSeconds + ' seconds';
     }
 
     function apiGet(path) {
@@ -597,6 +681,77 @@
         });
     }
 
+    function syncSfcProfile(force) {
+        if (!getKey()) return Promise.reject(new Error('No API key saved.'));
+        if (!force && sfcProfile && Date.now() - sfcProfile.syncedAt < PROFILE_REFRESH_MS) {
+            return Promise.resolve(sfcProfile);
+        }
+
+        return apiGet('/torn/crimes').then(function (data) {
+            var crimes = data.crimes || [];
+            var crime = crimes.find(function (x) {
+                var name = norm(x.name).replace(/\s+/g, '');
+                return name === 'searchforcash';
+            });
+            if (!crime) throw new Error('Could not find Search for Cash in Torn crime data.');
+
+            return Promise.all([
+                Promise.resolve(crime),
+                apiGet('/torn/' + crime.id + '/subcrimes'),
+                apiGet('/user/' + crime.id + '/crimes')
+            ]);
+        }).then(function (parts) {
+            var crime = parts[0];
+            var subData = parts[1];
+            var userData = parts[2];
+            var crimeData = userData.crimes;
+
+            if (!crimeData || typeof crimeData.skill !== 'number') {
+                throw new Error('Personal Search for Cash data was unavailable.');
+            }
+
+            var subNames = {};
+            (subData.subcrimes || []).forEach(function (s) {
+                subNames[String(s.id)] = s.name;
+            });
+
+            var uniques = crimeData.uniques || [];
+            var itemIds = [];
+            uniques.forEach(function (u) {
+                ((u.rewards && u.rewards.items) || []).forEach(function (it) {
+                    if (!itemIds.includes(it.id)) itemIds.push(it.id);
+                });
+            });
+
+            return fetchItemNames(itemIds).then(function (itemNames) {
+                var matched = matchCompletedRules(uniques, itemNames, SFC_RULES);
+
+                sfcProfile = {
+                    crimeId: crime.id,
+                    total: crime.unique_outcomes_count || 34,
+                    skill: crimeData.skill,
+                    completedCount: uniques.length,
+                    matchedKeys: matched,
+                    subNames: subNames,
+                    syncedAt: Date.now()
+                };
+                sfcLastError = '';
+                updatePill();
+                return sfcProfile;
+            });
+        }).catch(function (err) {
+            sfcLastError = err.message || String(err);
+            throw err;
+        });
+    }
+
+    function syncAllProfiles(force) {
+        return Promise.all([
+            syncApiProfile(force),
+            syncSfcProfile(force)
+        ]);
+    }
+
     function fetchItemNames(ids) {
         if (!ids.length) return Promise.resolve({});
         var chunks = [];
@@ -650,11 +805,11 @@
         return false;
     }
 
-    function matchCompleted(uniques, itemNames) {
+    function matchCompletedRules(uniques, itemNames, rules) {
         var matched = new Set();
         var descriptors = uniques.map(function (u) { return userRewardDescriptor(u.rewards, itemNames); });
 
-        SHOP_RULES.forEach(function (rule) {
+        rules.forEach(function (rule) {
             var target = ruleRewardDescriptor(rule);
             var idx = descriptors.findIndex(function (d) { return rewardMatches(d, target); });
             if (idx !== -1) {
@@ -663,6 +818,10 @@
             }
         });
         return matched;
+    }
+
+    function matchCompleted(uniques, itemNames) {
+        return matchCompletedRules(uniques, itemNames, SHOP_RULES);
     }
 
     function shopState(entry) {
@@ -756,11 +915,109 @@
         });
     }
 
+    function sfcLocationName(entry) {
+        if (sfcProfile && sfcProfile.subNames[String(entry.id)]) {
+            return sfcProfile.subNames[String(entry.id)];
+        }
+        return '';
+    }
+
+    function sfcRuleMatches(rule, percentage) {
+        return percentage >= rule.minPct && percentage <= rule.maxPct;
+    }
+
+    function checkSearchForCashApi() {
+        if (!getKey()) return Promise.resolve();
+
+        return syncSfcProfile(false).then(function () {
+            // If every unique is already complete, do not manufacture alerts just
+            // because a timing window happens to be active.
+            if (sfcProfile.completedCount >= sfcProfile.total) {
+                sfcActive.clear();
+                sfcLastError = '';
+                sfcLastCheck = Date.now();
+                updatePill();
+                return null;
+            }
+
+            return apiGet('/torn/searchforcash');
+        }).then(function (data) {
+            if (!data) return;
+
+            sfcLastCheck = Date.now();
+            sfcLastError = '';
+
+            var next = new Set();
+            var newly = [];
+
+            (data.searchforcash || []).forEach(function (entry) {
+                var location = sfcLocationName(entry);
+                var percentage = Number(entry.percentage);
+
+                SFC_RULES.forEach(function (rule) {
+                    if (norm(rule.location) !== norm(location)) return;
+                    if (sfcProfile.skill < rule.skill) return;
+                    if (sfcProfile.matchedKeys.has(rule.key)) return;
+                    if (!sfcRuleMatches(rule, percentage)) return;
+
+                    next.add(rule.key);
+
+                    if (!sfcActive.has(rule.key)) {
+                        newly.push({
+                            rule: rule,
+                            percentage: percentage,
+                            title: entry.title || ''
+                        });
+                    }
+                });
+            });
+
+            sfcActive = next;
+
+            var onSfcPage = currentCrime() === 'Search for Cash' && foreground();
+            if (!onSfcPage && newly.length) notifySfcRules(newly);
+
+            updatePill();
+        }).catch(function (err) {
+            sfcLastError = err.message || String(err);
+            updatePill();
+        });
+    }
+
+    function notifySfcRules(matches) {
+        var grouped = {};
+
+        matches.forEach(function (m) {
+            if (!grouped[m.rule.location]) grouped[m.rule.location] = [];
+            grouped[m.rule.location].push(m);
+        });
+
+        Object.keys(grouped).forEach(function (location, idx) {
+            setTimeout(function () {
+                var rows = grouped[location].map(function (m) {
+                    return m.rule.label + ' — ' + m.rule.condition +
+                        ' (current: ' + m.percentage + '%)';
+                });
+
+                alertUser(
+                    'SEARCH FOR CASH UNIQUE WINDOW',
+                    location + '\n' + rows.join('\n'),
+                    false,
+                    true
+                );
+            }, idx * 850);
+        });
+    }
+
     function startApiMonitor() {
         stopApiMonitor();
         if (!getKey()) return;
         checkShopliftingApi();
-        apiTimer = setInterval(checkShopliftingApi, pollSeconds * 1000);
+        checkSearchForCashApi();
+        apiTimer = setInterval(function () {
+            checkShopliftingApi();
+            checkSearchForCashApi();
+        }, pollSeconds * 1000);
     }
 
     function stopApiMonitor() {
@@ -785,7 +1042,7 @@
         for (var i = 0; cur && cur !== document.body && i < 12; i++, cur = cur.parentElement) {
             var txt = clean(cur.innerText || cur.textContent);
             if (cur.matches && cur.matches('li') && txt && txt.length <= 350) return cur;
-            if (txt && txt.length <= 350 && /\b(?:SHOPLIFT|PICKPOCKET)\b/i.test(txt)) return cur;
+            if (txt && txt.length <= 350 && /\b(?:SHOPLIFT|PICKPOCKET|SEARCH)\b/i.test(txt)) return cur;
             if (txt && txt.length <= 220) fallback = cur;
         }
         return fallback;
@@ -795,7 +1052,7 @@
         var h = hostFor(el);
         var txt = clean(h && (h.innerText || h.textContent));
         if (txt) {
-            txt = txt.replace(/\bSHOPLIFT\s*\d*\b/ig, '').replace(/\bPICKPOCKET\s*\d*\b/ig, '').replace(/\s+/g, ' ').trim();
+            txt = txt.replace(/\bSHOPLIFT\s*\d*\b/ig, '').replace(/\bPICKPOCKET\s*\d*\b/ig, '').replace(/\bSEARCH\s*\d*\b/ig, '').replace(/\s+/g, ' ').trim();
         }
         return txt || c + ' unique star detected';
     }
@@ -883,7 +1140,7 @@
     refreshLifecycle();
 
     if (getKey()) {
-        syncApiProfile(false)
+        syncAllProfiles(false)
             .catch(function (err) {
                 apiLastError = err.message || String(err);
                 updatePill();
