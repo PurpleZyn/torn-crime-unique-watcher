@@ -60,9 +60,9 @@ The userscript includes `@updateURL` and `@downloadURL` metadata pointing at thi
 
 ## Current version
 
-**v0.1.0**
+**v0.1.1**
 
-This is the first test release. Torn's frontend markup can change, so real-world testing on both crime pages is important.
+v0.1.1 fixes a false positive where Torn's overall unique-progress display (for example, 53 / 58) could be mistaken for an available unique. Detection now keys specifically off Torn's actual `unique-outcome-star` element.
 
 ## Disclaimer
 
