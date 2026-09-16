@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.1
-// @description  Search for Cash + Shoplifting API unique-window alerts, plus live Pickpocketing unique detection.
+// @version      0.3.2
+// @description  Search for Cash + Shoplifting API alerts, live unique detection, draggable/minimizable status pill.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -47,6 +47,8 @@
 
     var pillDragging = false;
     var suppressPillClick = false;
+    var pillMinimized = localStorage.getItem(PREFIX + '-pill-minimized') === '1';
+    var pageActionGraceUntil = 0;
 
     /*
      * Only security-dependent Shoplifting uniques are included here.
@@ -196,7 +198,12 @@
         var s = document.createElement('style');
         s.id = PREFIX + '-style';
         s.textContent =
-            '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;padding:8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:move;box-shadow:0 4px 15px #0008;user-select:none;touch-action:none}' +
+            '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;display:flex;align-items:center;gap:7px;padding:8px 9px 8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:move;box-shadow:0 4px 15px #0008;user-select:none;touch-action:none}' +
+            '#tcuw-pill-label{white-space:nowrap}' +
+            '#tcuw-pill-toggle{width:22px;height:22px;padding:0!important;border:0!important;border-radius:50%;background:#ffffff12!important;color:#ddd!important;font:700 14px/22px Arial!important;cursor:pointer!important}' +
+            '#tcuw-pill.mini{padding:5px;border-radius:50%;gap:0}' +
+            '#tcuw-pill.mini #tcuw-pill-label{display:none}' +
+            '#tcuw-pill.mini #tcuw-pill-toggle{width:28px;height:28px;line-height:28px;background:transparent!important;color:#ffd15a!important}' +
             '#tcuw-pill.warn{border-color:#d76b55}' +
             '#tcuw-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2147483647;width:min(560px,calc(100vw - 28px));padding:14px;border:1px solid #f0be36;border-radius:9px;background:#17171af7;color:#fff;text-align:center;font:600 14px Arial;box-shadow:0 8px 28px #000a}' +
             '#tcuw-toast b{color:#ffd75e}#tcuw-toast span{display:block;margin-top:5px;font-weight:400;white-space:pre-line}' +
@@ -221,9 +228,33 @@
         p.id = PREFIX + '-pill';
         restorePillPosition(p);
 
+        var label = document.createElement('span');
+        label.id = PREFIX + '-pill-label';
+
+        var toggle = document.createElement('button');
+        toggle.id = PREFIX + '-pill-toggle';
+        toggle.type = 'button';
+        toggle.title = 'Minimize / expand watcher';
+        toggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+
+            if (suppressPillClick) {
+                suppressPillClick = false;
+                return;
+            }
+
+            pillMinimized = !pillMinimized;
+            localStorage.setItem(PREFIX + '-pill-minimized', pillMinimized ? '1' : '0');
+            updatePill();
+            clampPillToViewport(p);
+        });
+
+        p.append(label, toggle);
         p.addEventListener('pointerdown', beginPillDrag);
 
         p.addEventListener('click', function (e) {
+            if (e.target === toggle) return;
+
             if (suppressPillClick) {
                 suppressPillClick = false;
                 return;
@@ -256,6 +287,7 @@
         });
 
         document.body.appendChild(p);
+        updatePill();
         clampPillToViewport(p);
         return p;
     }
@@ -391,8 +423,17 @@
         }
 
         parts.push(soundOn ? '🔊 ' + Math.round(volume * 100) + '%' : '🔇');
-        p.textContent = '★ ' + parts.join(' • ');
-        p.title = 'Drag to move • Click: mute/unmute • Shift-click: test • Ctrl-click: volume • Alt-click: API settings';
+
+        var label = document.getElementById(PREFIX + '-pill-label');
+        var toggle = document.getElementById(PREFIX + '-pill-toggle');
+
+        if (label) label.textContent = '★ ' + parts.join(' • ');
+        if (toggle) toggle.textContent = pillMinimized ? '★' : '−';
+
+        p.classList.toggle('mini', pillMinimized);
+        p.title = pillMinimized
+            ? 'Drag to move • Click ★ to expand'
+            : 'Drag to move • Click: mute/unmute • Shift-click: test • Ctrl-click: volume • Alt-click: API settings';
     }
 
     function cycleVolume() {
@@ -1047,39 +1088,41 @@
         var word = actionWordForCrime(c);
         if (!word) return [];
 
-        return Array.from(document.querySelectorAll('button,[role="button"]')).filter(function (el) {
-            if (!isVisible(el)) return false;
-            var txt = clean(el.innerText || el.textContent).toUpperCase();
-            return txt === word || txt.indexOf(word + ' ') === 0;
-        });
+        return Array.from(document.querySelectorAll('button,[role="button"]'))
+            .filter(function (el) {
+                if (!isVisible(el)) return false;
+                var txt = clean(el.innerText || el.textContent).toUpperCase();
+                return txt === word || txt.indexOf(word + ' ') === 0;
+            })
+            .sort(function (a, b) {
+                return a.getBoundingClientRect().top - b.getBoundingClientRect().top;
+            });
     }
 
     function nearestActionForStar(star, c) {
         var starRect = star.getBoundingClientRect();
-        var sx = starRect.left + starRect.width / 2;
         var sy = starRect.top + starRect.height / 2;
+        var actions = actionCandidates(c);
         var best = null;
-        var bestScore = Infinity;
+        var bestDy = Infinity;
+        var bestIndex = -1;
 
-        actionCandidates(c).forEach(function (el) {
+        actions.forEach(function (el, index) {
             var r = el.getBoundingClientRect();
-            var ex = r.left + r.width / 2;
             var ey = r.top + r.height / 2;
             var dy = Math.abs(ey - sy);
-            var dx = Math.abs(ex - sx);
 
-            // The unique star belongs to the same crime row as its action button.
-            // Weight vertical distance heavily so a nearby row wins even when the
-            // star itself is positioned slightly outside the button container.
-            var score = (dy * 5) + dx;
-
-            if (dy <= 110 && score < bestScore) {
+            // Row membership is fundamentally vertical on these crime lists.
+            // Ignore horizontal distance so a result panel cannot pull the star
+            // toward the wrong neighboring action.
+            if (dy < bestDy) {
                 best = el;
-                bestScore = score;
+                bestDy = dy;
+                bestIndex = index;
             }
         });
 
-        return best;
+        return bestDy <= 95 ? {action:best, index:bestIndex, actions:actions} : {action:null, index:-1, actions:actions};
     }
 
     function rowForAction(action, c) {
@@ -1097,15 +1140,28 @@
                 best = cur;
             }
 
-            // Once we have moved into a large section/container, stop. This prevents
-            // the post-crime result panel from pulling in every target/shop on page.
             if (rect.height > 220) break;
         }
 
         return best;
     }
 
-    function stableRowLabel(row, action, c) {
+    function stableRowLabel(row, action, c, rowIndex) {
+        if (c === 'Shoplifting') {
+            var shops = [
+                "Sally's Sweet Shop",
+                "Bits 'n' Bobs",
+                'TC Clothing',
+                'Super Store',
+                'Pharmacy',
+                'Cyber Force',
+                'Jewelry Store',
+                "Big Al's Gun Shop"
+            ];
+
+            if (rowIndex >= 0 && rowIndex < shops.length) return shops[rowIndex];
+        }
+
         if (!row) return '';
 
         var actionWord = actionWordForCrime(c);
@@ -1129,43 +1185,25 @@
             return true;
         });
 
-        if (c === 'Shoplifting') {
-            var knownShops = [
-                "Sally's Sweet Shop",
-                "Bits 'n' Bobs",
-                'TC Clothing',
-                'Super Store',
-                'Pharmacy',
-                'Cyber Force',
-                'Jewelry Store',
-                "Big Al's Gun Shop"
-            ];
-            var foundShop = knownShops.find(function (shop) {
-                return candidates.some(function (line) {
-                    return norm(line).indexOf(norm(shop)) !== -1;
-                });
-            });
-            if (foundShop) return foundShop;
-        }
-
         return candidates.length ? candidates[0] : '';
     }
 
     function identifyUniqueStar(star, c) {
-        var action = nearestActionForStar(star, c);
+        var match = nearestActionForStar(star, c);
+        var action = match.action;
+        var rowIndex = match.index;
         var row = rowForAction(action, c);
-        var label = stableRowLabel(row, action, c);
+        var label = stableRowLabel(row, action, c, rowIndex);
 
-        if (label) {
+        if (rowIndex >= 0) {
             return {
-                key: c + '|' + norm(label),
-                detail: label
+                // Stable row identity survives Torn replacing result text after
+                // the user performs the crime.
+                key: c + '|row-' + rowIndex,
+                detail: label || (c + ' unique available')
             };
         }
 
-        // Fallback is intentionally based on the star's position rather than a
-        // giant parent text block. This keeps the key stable and avoids swallowing
-        // result text after a crime is clicked.
         var rect = star.getBoundingClientRect();
         var bucketY = Math.round((rect.top + rect.height / 2) / 20) * 20;
 
@@ -1181,6 +1219,12 @@
         if (!c || !foreground()) return;
 
         var now = Date.now();
+
+        // Torn redraws the crime row immediately after an action. During that
+        // transition the unique star/result markup can briefly move or be replaced.
+        // Keep the existing active keys and wait for the row to settle instead of
+        // treating the result animation as a second unique.
+        if (now < pageActionGraceUntil) return;
         var next = new Set();
 
         indicators().forEach(function (el) {
@@ -1238,6 +1282,19 @@
         schedulePageScan();
         updatePill();
     }
+
+    document.addEventListener('click', function (e) {
+        var button = e.target && e.target.closest ? e.target.closest('button,[role="button"]') : null;
+        if (!button) return;
+
+        var txt = clean(button.innerText || button.textContent).toUpperCase();
+        if (!/^(SHOPLIFT|PICKPOCKET|SEARCH)(?:\s|$)/.test(txt)) return;
+
+        // Preserve the currently active unique identity while Torn renders the
+        // crime result, then scan again after the UI settles.
+        pageActionGraceUntil = Date.now() + 2500;
+        setTimeout(schedulePageScan, 2600);
+    }, true);
 
     document.addEventListener('pointerdown', primeAudio, {passive:true});
     document.addEventListener('keydown', primeAudio, {passive:true});
