@@ -1,93 +1,116 @@
 # Torn Crime Unique Watcher
 
-A lightweight Torn userscript with two different unique watchers:
+A Torn userscript focused on time-sensitive Crimes 2.0 unique outcomes.
 
-- **Pickpocketing:** watches Torn's real Unique Outcome star while you are actively viewing the Pickpocketing page.
-- **Shoplifting:** uses Torn's official API to watch security states from anywhere on Torn and alerts when a security-dependent unique you may still need becomes available.
+## What it watches
+
+### Search for Cash — API watcher
+
+Uses Torn's official `/torn/searchforcash` API endpoint to monitor the changing global percentages for Search for Cash locations from anywhere on Torn.
+
+The watcher currently covers documented time-sensitive unique windows for:
+
+- Search the Subway
+  - rush-hour / high-ridership uniques
+  - on-peak uniques
+  - off-peak / low-ridership uniques
+- Search the Junkyard
+  - crushing-rating windows
+- Search the Beach
+  - tide-rating windows
+- Search the Cemetery
+  - groundskeeping active / inactive windows
+- Search the Fountain
+  - collections-rating windows
+
+It also reads your Search for Cash skill and completed uniques so it can avoid alerting for outcomes you already have.
+
+If Torn reports that you have all **34 / 34** Search for Cash uniques, real SFC API alerts are disabled automatically.
+
+### Shoplifting — API watcher
+
+Uses Torn's official `/torn/shoplifting` API endpoint to monitor changing shop security from anywhere on Torn.
+
+Background Shoplifting alerts focus on genuinely time-sensitive states where at least one relevant security system is disabled or off duty.
+
+The watcher also reads your Shoplifting skill and completed uniques to filter opportunities.
+
+### Pickpocketing — live page watcher
+
+Pickpocketing targets are handled differently. The script only watches Torn's real `unique-outcome-star` while the Pickpocketing page is actively visible and focused.
+
+This live-page watcher also works on Search for Cash and Shoplifting when those pages are actively viewed, which helps catch unique conditions that cannot be proven from the global API alone.
 
 ## Install
 
 ### Tampermonkey
 
-[Install v0.2.1](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.2.0.user.js)
+[Install v0.3.0](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.0.user.js)
 
-The versioned installer is provided to avoid stale GitHub raw-file caching. Future updates still point at the normal stable userscript path.
+The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
-## Shoplifting API setup
+## API setup
 
-v0.2.0 requires a **Minimal Access** Torn API key for personalized Shoplifting alerts.
+The personalized API watchers require a **Minimal Access** Torn API key.
 
 1. Install the script.
 2. Open any Torn page.
-3. Click the watcher pill in the lower-right when it says `SL API setup`.
-4. Use **Open Torn API settings** if needed and create a Minimal Access key.
-5. Paste the key into the watcher.
-6. Choose a 15, 30, or 60 second polling interval.
+3. Click the watcher pill if API setup is not already complete.
+4. Create or use a Minimal Access key in Torn's API settings.
+5. Paste it into the watcher.
+6. Choose a 15, 30, or 60 second API polling interval.
 7. Click **Save & Test API**.
 
-The key is stored in your browser's Torn localStorage and is sent only to Torn's official `api.torn.com` API.
-
-The API setup reads:
-
-- your Shoplifting skill
-- your completed Shoplifting unique outcomes
-- current Shoplifting shop security states
-- Torn item names used to identify completed unique rewards
-
-The watcher refreshes your personal Shoplifting data periodically and polls current shop security at the interval you selected.
-
-## What Shoplifting API alerts mean
-
-The API can see shop security states, so the script monitors uniques whose availability depends on cameras, checkpoints, or guards.
-
-It filters using your Shoplifting skill and the completed unique rewards it can recognize. When a qualifying security window opens, it alerts from whatever Torn page you are currently using.
-
-Some uniques have conditions that cannot be fully established from the Shoplifting security API. For example, the Cluster Ring also requires zero notoriety. In those cases the alert explicitly mentions the additional condition.
-
-Security-independent uniques and conditions such as notoriety-only outcomes are still handled by Torn's own unique star when you actively visit the Shoplifting page.
-
-## Pickpocketing
-
-Pickpocketing remains page-based. The script only watches it while the Pickpocketing page is actively visible and focused.
-
-When Torn displays its real Unique Outcome star, the script:
-
-- flashes the screen
-- plays the alert sound
-- displays a Unique Available popup
-- suppresses duplicate alerts for the same visible opportunity
-
-The page watcher automatically pauses when the Torn tab/window is not active.
+The key is stored only in Torn's browser localStorage and is sent only to Torn's official `api.torn.com` API.
 
 ## Controls
 
-The watcher pill is available throughout Torn in v0.2.0.
+The watcher pill is draggable and remembers its screen position.
 
-- **Click:** mute/unmute
-- **Shift + Click:** test the flash and alert sound
+- **Drag:** move the pill
+- **Click:** mute/unmute alerts
+- **Shift + Click:** test the normal alert sound
 - **Ctrl + Click:** cycle volume through 25%, 50%, 75%, and 100%
-- **Alt + Click:** open Shoplifting API settings
-- **Drag:** move the watcher pill anywhere on screen
+- **Alt + Click:** open API settings
 
-The API settings window also includes **Reset Pill Position** to return it to the bottom-right.
+The settings window also includes:
 
-Before an API key is configured, normal click opens API setup.
+- **Test SFC Alert** — simulates a Search for Cash notification even if you have all SFC uniques
+- **Reset Pill Position** — returns the pill to the bottom-right
+
+## Search for Cash test behavior
+
+A player with all Search for Cash uniques should see something like:
+
+`SFC 0 missing`
+
+and should receive no real SFC unique-window alerts.
+
+A player missing a time-sensitive unique may receive an alert such as:
+
+`SEARCH FOR CASH UNIQUE WINDOW`
+
+`Search the Beach`
+`Silver Bead — 40% or lower tide rating`
+
+The API endpoint returns the current subcrime ID, status title, and percentage. The script maps that subcrime ID to Torn's current subcrime metadata before evaluating the documented unique thresholds.
 
 ## Privacy / behavior
 
 The script:
 
-- does not host or send data to an external server
-- never performs a crime automatically
-- never clicks a crime for you
-- uses Torn's official API for background Shoplifting checks
-- only performs DOM-based unique detection on Shoplifting/Pickpocketing while that page is actively viewed
+- has no external server
+- does not upload your API key
+- does not perform crimes automatically
+- does not click crime actions
+- uses Torn's official API for background Search for Cash and Shoplifting checks
+- only reads live crime-page DOM data while that page is actively viewed
 
 ## Current version
 
-**v0.2.1**
+**v0.3.0**
 
-v0.2.0 adds the hybrid Shoplifting API watcher while preserving the v0.1.2 live-page Pickpocketing watcher, sound controls, and strict `unique-outcome-star` detection.
+v0.3.0 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
 ## Disclaimer
 
