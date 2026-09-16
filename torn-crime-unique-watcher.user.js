@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.1.0
+// @version      0.1.1
 // @description  Alerts when Torn marks a Shoplifting or Pickpocketing unique outcome as available.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -149,37 +149,64 @@
         beep(); flash(); toast(c, detail);
     }
 
+    function isVisible(el) {
+        if (!(el instanceof Element)) return false;
+        var rect = el.getBoundingClientRect();
+        var style = window.getComputedStyle(el);
+        return rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.opacity !== '0';
+    }
+
     function indicators() {
-        var out = new Set();
-        var sel = '[aria-label*="unique outcome" i],[title*="unique outcome" i],[data-tooltip*="unique outcome" i],[data-tip*="unique outcome" i]';
-        document.querySelectorAll(sel).forEach(function (e) { out.add(e); });
-        document.querySelectorAll('svg title,title').forEach(function (e) {
-            if (/unique\s*outcome/i.test(e.textContent || '')) out.add(e);
-        });
-        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        var n;
-        while ((n = walker.nextNode())) {
-            if (/unique\s*outcome/i.test(n.nodeValue || '') && n.parentElement) out.add(n.parentElement);
-        }
-        return Array.from(out);
+        // Torn's actual available-unique star uses the unique-outcome-star asset.
+        // Generic "unique outcome" text also exists in the progress UI, so searching
+        // page text causes false positives such as the 53 / 58 completion display.
+        return Array.from(
+            document.querySelectorAll('[style*="unique-outcome-star"]')
+        ).filter(isVisible);
     }
 
     function hostFor(el) {
         var cur = el;
-        var best = el;
-        for (var i = 0; cur && cur !== document.body && i < 10; i++, cur = cur.parentElement) {
+        var fallback = el;
+
+        for (var i = 0; cur && cur !== document.body && i < 12; i++, cur = cur.parentElement) {
             var txt = clean(cur.innerText || cur.textContent);
-            if (txt && txt.length <= 220) best = cur;
-            if (cur.matches && cur.matches('button,[role="button"],li')) return cur;
+
+            if (cur.matches && cur.matches('li') && txt && txt.length <= 350) {
+                return cur;
+            }
+
+            if (
+                txt &&
+                txt.length <= 350 &&
+                /\\b(?:SHOPLIFT|PICKPOCKET)\\b/i.test(txt)
+            ) {
+                return cur;
+            }
+
+            if (txt && txt.length <= 220) fallback = cur;
         }
-        return best;
+
+        return fallback;
     }
 
     function describe(el, c) {
         var h = hostFor(el);
         var txt = clean(h && (h.innerText || h.textContent));
-        if (!txt && h && h.getAttribute) txt = clean((h.getAttribute('aria-label') || '') + ' ' + (h.getAttribute('title') || ''));
-        return txt || c + ' unique available';
+
+        if (txt) {
+            txt = txt
+                .replace(/\\bSHOPLIFT\\s*\\d*\\b/ig, '')
+                .replace(/\\bPICKPOCKET\\s*\\d*\\b/ig, '')
+                .replace(/\\s+/g, ' ')
+                .trim();
+        }
+
+        return txt || c + ' unique star detected';
     }
 
     function scan() {
@@ -226,7 +253,7 @@
         }
         if (!observer) {
             observer = new MutationObserver(schedule);
-            observer.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['aria-label','title','data-tooltip','data-tip','class'] });
+            observer.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['style','class'] });
         }
         schedule();
     }
