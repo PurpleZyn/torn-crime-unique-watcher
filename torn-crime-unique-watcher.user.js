@@ -183,7 +183,7 @@
             if (
                 txt &&
                 txt.length <= 350 &&
-                /\\b(?:SHOPLIFT|PICKPOCKET)\\b/i.test(txt)
+                /\b(?:SHOPLIFT|PICKPOCKET)\b/i.test(txt)
             ) {
                 return cur;
             }
@@ -200,9 +200,9 @@
 
         if (txt) {
             txt = txt
-                .replace(/\\bSHOPLIFT\\s*\\d*\\b/ig, '')
-                .replace(/\\bPICKPOCKET\\s*\\d*\\b/ig, '')
-                .replace(/\\s+/g, ' ')
+                .replace(/\bSHOPLIFT\s*\d*\b/ig, '')
+                .replace(/\bPICKPOCKET\s*\d*\b/ig, '')
+                .replace(/\s+/g, ' ')
                 .trim();
         }
 
