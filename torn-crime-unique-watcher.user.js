@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.0
+// @version      0.3.1
 // @description  Search for Cash + Shoplifting API unique-window alerts, plus live Pickpocketing unique detection.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -1036,25 +1036,143 @@
         return Array.from(document.querySelectorAll('[style*="unique-outcome-star"]')).filter(isVisible);
     }
 
-    function hostFor(el) {
-        var cur = el;
-        var fallback = el;
-        for (var i = 0; cur && cur !== document.body && i < 12; i++, cur = cur.parentElement) {
-            var txt = clean(cur.innerText || cur.textContent);
-            if (cur.matches && cur.matches('li') && txt && txt.length <= 350) return cur;
-            if (txt && txt.length <= 350 && /\b(?:SHOPLIFT|PICKPOCKET|SEARCH)\b/i.test(txt)) return cur;
-            if (txt && txt.length <= 220) fallback = cur;
-        }
-        return fallback;
+    function actionWordForCrime(c) {
+        if (c === 'Shoplifting') return 'SHOPLIFT';
+        if (c === 'Pickpocketing') return 'PICKPOCKET';
+        if (c === 'Search for Cash') return 'SEARCH';
+        return '';
     }
 
-    function describe(el, c) {
-        var h = hostFor(el);
-        var txt = clean(h && (h.innerText || h.textContent));
-        if (txt) {
-            txt = txt.replace(/\bSHOPLIFT\s*\d*\b/ig, '').replace(/\bPICKPOCKET\s*\d*\b/ig, '').replace(/\bSEARCH\s*\d*\b/ig, '').replace(/\s+/g, ' ').trim();
+    function actionCandidates(c) {
+        var word = actionWordForCrime(c);
+        if (!word) return [];
+
+        return Array.from(document.querySelectorAll('button,[role="button"]')).filter(function (el) {
+            if (!isVisible(el)) return false;
+            var txt = clean(el.innerText || el.textContent).toUpperCase();
+            return txt === word || txt.indexOf(word + ' ') === 0;
+        });
+    }
+
+    function nearestActionForStar(star, c) {
+        var starRect = star.getBoundingClientRect();
+        var sx = starRect.left + starRect.width / 2;
+        var sy = starRect.top + starRect.height / 2;
+        var best = null;
+        var bestScore = Infinity;
+
+        actionCandidates(c).forEach(function (el) {
+            var r = el.getBoundingClientRect();
+            var ex = r.left + r.width / 2;
+            var ey = r.top + r.height / 2;
+            var dy = Math.abs(ey - sy);
+            var dx = Math.abs(ex - sx);
+
+            // The unique star belongs to the same crime row as its action button.
+            // Weight vertical distance heavily so a nearby row wins even when the
+            // star itself is positioned slightly outside the button container.
+            var score = (dy * 5) + dx;
+
+            if (dy <= 110 && score < bestScore) {
+                best = el;
+                bestScore = score;
+            }
+        });
+
+        return best;
+    }
+
+    function rowForAction(action, c) {
+        if (!action) return null;
+
+        var word = actionWordForCrime(c);
+        var cur = action;
+        var best = action;
+
+        for (var i = 0; cur && cur !== document.body && i < 12; i++, cur = cur.parentElement) {
+            var rect = cur.getBoundingClientRect();
+            var txt = clean(cur.innerText || cur.textContent).toUpperCase();
+
+            if (txt.indexOf(word) !== -1 && rect.height > 0 && rect.height <= 180) {
+                best = cur;
+            }
+
+            // Once we have moved into a large section/container, stop. This prevents
+            // the post-crime result panel from pulling in every target/shop on page.
+            if (rect.height > 220) break;
         }
-        return txt || c + ' unique star detected';
+
+        return best;
+    }
+
+    function stableRowLabel(row, action, c) {
+        if (!row) return '';
+
+        var actionWord = actionWordForCrime(c);
+        var actionText = clean(action && (action.innerText || action.textContent)).toUpperCase();
+
+        var lines = String(row.innerText || row.textContent || '')
+            .split(/\n+/)
+            .map(function (line) { return clean(line); })
+            .filter(Boolean);
+
+        var candidates = lines.filter(function (line) {
+            var upper = line.toUpperCase();
+
+            if (upper === actionWord) return false;
+            if (actionText && upper === actionText) return false;
+            if (upper.indexOf(actionWord + ' ') === 0) return false;
+            if (/^\d+$/.test(line)) return false;
+            if (/^(SUCCESS|FAILURE|CRITICAL SUCCESS|CRITICAL FAILURE)$/i.test(line)) return false;
+            if (line.length > 90) return false;
+
+            return true;
+        });
+
+        if (c === 'Shoplifting') {
+            var knownShops = [
+                "Sally's Sweet Shop",
+                "Bits 'n' Bobs",
+                'TC Clothing',
+                'Super Store',
+                'Pharmacy',
+                'Cyber Force',
+                'Jewelry Store',
+                "Big Al's Gun Shop"
+            ];
+            var foundShop = knownShops.find(function (shop) {
+                return candidates.some(function (line) {
+                    return norm(line).indexOf(norm(shop)) !== -1;
+                });
+            });
+            if (foundShop) return foundShop;
+        }
+
+        return candidates.length ? candidates[0] : '';
+    }
+
+    function identifyUniqueStar(star, c) {
+        var action = nearestActionForStar(star, c);
+        var row = rowForAction(action, c);
+        var label = stableRowLabel(row, action, c);
+
+        if (label) {
+            return {
+                key: c + '|' + norm(label),
+                detail: label
+            };
+        }
+
+        // Fallback is intentionally based on the star's position rather than a
+        // giant parent text block. This keeps the key stable and avoids swallowing
+        // result text after a crime is clicked.
+        var rect = star.getBoundingClientRect();
+        var bucketY = Math.round((rect.top + rect.height / 2) / 20) * 20;
+
+        return {
+            key: c + '|star-y-' + bucketY,
+            detail: c + ' unique available'
+        };
     }
 
     function pageScan() {
@@ -1066,11 +1184,15 @@
         var next = new Set();
 
         indicators().forEach(function (el) {
-            var detail = describe(el, c);
-            var key = c + '|' + detail.toLowerCase();
+            var identity = identifyUniqueStar(el, c);
+            var key = identity.key;
+            var detail = identity.detail;
+
             next.add(key);
+
             var previous = pageActive.has(key);
             var cooled = now - (pageLastAlert.get(key) || 0) > 30000;
+
             if (!previous && cooled) {
                 pageLastAlert.set(key, now);
                 alertUser('UNIQUE AVAILABLE — ' + c, detail, false, false);
