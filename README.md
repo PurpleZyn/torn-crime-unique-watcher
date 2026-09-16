@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.3.1](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.1.user.js)
+[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.2.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -108,11 +108,13 @@ The script:
 
 ## Current version
 
-**v0.3.1**
+**v0.3.2**
 
-v0.3.1 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
+v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
-v0.3.1 fixes live unique row identification for Shoplifting, Pickpocketing, and Search for Cash. Alerts now lock the unique star to the nearest actual crime action row, which prevents post-click result text or entire crime lists from being mistaken for a new unique.
+v0.3.2 fixes live unique row identification for Shoplifting, Pickpocketing, and Search for Cash. Alerts now lock the unique star to the nearest actual crime action row, which prevents post-click result text or entire crime lists from being mistaken for a new unique.
+
+v0.3.2 prevents post-action duplicate alerts by preserving the active row identity while Torn renders the crime result. Shoplifting rows now use stable visual row indexes, avoiding neighboring-shop mislabels such as Cyber Force vs Jewelry Store. The watcher pill can also be minimized to a small `★`, and that state is remembered.
 
 ## Disclaimer
 
