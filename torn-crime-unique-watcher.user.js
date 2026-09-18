@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.5
-// @description  Exact-ID Shoplifting + Search for Cash API alerts, live unique detection, collapsible watcher.
+// @version      0.3.6
+// @description  Shop-aware Shoplifting + Search for Cash API alerts, live unique detection, collapsible watcher.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -112,66 +112,21 @@
     ];
 
     /*
-     * Exact Shoplifting unique-result mapping.
-     *
-     * Torn's /torn/crimes metadata provides Shoplifting's ordered
-     * unique_outcomes_ids array. The official Shoplifting unique tables contain
-     * exactly 58 outcomes in the same shop/order sequence. Using the actual
-     * unique IDs avoids unreliable reward-based matching (money ranges, points,
-     * duplicate reward shapes, etc.).
+     * Shoplifting unique IDs are grouped by shop in Torn's crime metadata, but
+     * the order inside each shop is not the same as the visual/wiki card order.
+     * We therefore use these group boundaries only to identify the shop, then
+     * identify a completed rule from its reward data inside that shop.
      */
-    var SHOP_RULE_OUTCOME_INDEX = {
-        'sally-jawbreaker': 0,
-        'sally-empty-box': 1,
-        'sally-pixie': 2,
-        'sally-sherbet': 3,
-        'sally-treats': 4,
-
-        'bits-champagne': 5,
-        'bits-duct': 8,
-        'bits-cash': 10,
-
-        'tc-raincoat': 12,
-        'tc-tailor': 14,
-        'tc-bush': 18,
-        'tc-poncho': 20,
-
-        'super-dslr': 21,
-        'super-dvd': 22,
-        'super-dongle': 24,
-        'super-keyboard': 25,
-
-        'pharm-melatonin': 28,
-        'pharm-medical': 29,
-        'pharm-tyrosine': 30,
-        'pharm-epi': 31,
-        'pharm-serotonin': 32,
-
-        'cyber-points': 33,
-        'cyber-cash': 34,
-        'cyber-rf': 35,
-        'cyber-hpcpu': 36,
-        'cyber-parts': 37,
-        'cyber-chair': 38,
-
-        'jewel-tooth': 39,
-        'jewel-diamond-latex': 40,
-        'jewel-ivory': 41,
-        'jewel-knife': 42,
-        'jewel-mirror': 43,
-        'jewel-grinding': 46,
-        'jewel-drill': 47,
-        'jewel-cluster': 48,
-
-        'al-ammo': 49,
-        'al-armor': 50,
-        'al-ninja': 51,
-        'al-deagle': 52,
-        'al-stick': 53,
-        'al-steyr': 54,
-        'al-knives': 55,
-        'al-heg': 56
-    };
+    var SHOP_OUTCOME_GROUPS = [
+        {shop:"Sally's Sweet Shop", start:0, count:5},
+        {shop:"Bits 'n' Bobs", start:5, count:7},
+        {shop:'TC Clothing', start:12, count:9},
+        {shop:'Super Store', start:21, count:7},
+        {shop:'Pharmacy', start:28, count:5},
+        {shop:'Cyber Force', start:33, count:6},
+        {shop:'Jewelry Store', start:39, count:10},
+        {shop:"Big Al's Gun Shop", start:49, count:9}
+    ];
 
     /*
      * Time-sensitive Search for Cash uniques.
@@ -793,12 +748,12 @@
             return fetchItemNames(itemIds).then(function (itemNames) {
                 var matched = matchCompletedShoplifting(
                     uniques,
+                    itemNames,
                     shopCrime.unique_outcomes_ids
                 );
-                var matchSource = 'unique IDs';
+                var matchSource = 'shop-group + reward';
 
-                // Defensive fallback for a future API response that omits/reorders
-                // the unique ID list. Current Torn metadata supplies all 58 IDs.
+                // Defensive fallback if Torn ever omits the full 58-ID metadata list.
                 if (!matched) {
                     matched = matchCompleted(uniques, itemNames);
                     matchSource = 'reward fallback';
@@ -909,8 +864,32 @@
         });
     }
 
+    function canonicalItemName(name) {
+        var n = norm(name)
+            .replace(/[’']/g, '')
+            .replace(/[-–—]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        var aliases = {
+            'ninja stars':'ninja star',
+            'throwing knives':'throwing knife',
+            'stick grenades':'stick grenade',
+            'gold rings':'gold ring',
+            'gold teeth':'gold tooth',
+            'syringes':'syringe',
+            'computer fans':'computer fan',
+            'bottles of champagne':'bottle of champagne',
+            'bags of sherbet':'bag of sherbet'
+        };
+
+        return aliases[n] || n;
+    }
+
     function itemSignature(items) {
-        return items.map(function (p) { return norm(p[0]) + ':' + Number(p[1]); }).sort().join('|');
+        return items.map(function (p) {
+            return canonicalItemName(p[0]) + ':' + Number(p[1]);
+        }).sort().join('|');
     }
 
     function userRewardDescriptor(reward, itemNames) {
@@ -946,23 +925,57 @@
         return false;
     }
 
-    function matchCompletedShoplifting(uniques, uniqueOutcomeIds) {
-        var matched = new Set();
-        var completedIds = new Set(
-            (uniques || []).map(function (u) { return Number(u.id); })
-        );
-
+    function shopOutcomeSets(uniqueOutcomeIds) {
         if (!Array.isArray(uniqueOutcomeIds) || uniqueOutcomeIds.length < 58) {
             return null;
         }
 
-        SHOP_RULES.forEach(function (rule) {
-            var index = SHOP_RULE_OUTCOME_INDEX[rule.key];
-            if (!Number.isInteger(index)) return;
+        var sets = {};
+        SHOP_OUTCOME_GROUPS.forEach(function (g) {
+            sets[norm(g.shop)] = new Set(
+                uniqueOutcomeIds.slice(g.start, g.start + g.count).map(Number)
+            );
+        });
+        return sets;
+    }
 
-            var resultId = Number(uniqueOutcomeIds[index]);
-            if (resultId && completedIds.has(resultId)) {
+    function matchCompletedShoplifting(uniques, itemNames, uniqueOutcomeIds) {
+        var sets = shopOutcomeSets(uniqueOutcomeIds);
+        if (!sets) return null;
+
+        var descriptors = (uniques || []).map(function (u) {
+            return {
+                id: Number(u.id),
+                reward: userRewardDescriptor(u.rewards, itemNames)
+            };
+        });
+
+        var usedIds = new Set();
+        var matched = new Set();
+
+        SHOP_RULES.forEach(function (rule) {
+            var shopSet = sets[norm(rule.shop)];
+            if (!shopSet) return;
+
+            var idx = descriptors.findIndex(function (d) {
+                if (usedIds.has(d.id) || !shopSet.has(d.id)) return false;
+
+                // Points are not represented in UserCrimeUniquesReward. The only
+                // rewardless time-window unique in Cyber Force is its 3-9 Points
+                // outcome, so a rewardless completed Cyber unique identifies it.
+                if (rule.key === 'cyber-points') {
+                    return d.reward && d.reward.type === 'zero';
+                }
+
+                return rewardMatches(
+                    d.reward,
+                    ruleRewardDescriptor(rule)
+                );
+            });
+
+            if (idx !== -1) {
                 matched.add(rule.key);
+                usedIds.add(descriptors[idx].id);
             }
         });
 
