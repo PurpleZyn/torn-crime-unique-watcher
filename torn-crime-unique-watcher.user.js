@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.4
-// @description  Search for Cash + Shoplifting API alerts, live unique detection, draggable/collapsible watcher.
+// @version      0.3.5
+// @description  Exact-ID Shoplifting + Search for Cash API alerts, live unique detection, collapsible watcher.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -110,6 +110,68 @@
         R('al-knives', "Big Al's Gun Shop", 70, 'Throwing Knives x4', {camera:true}, I('Throwing Knife',4)),
         R('al-heg', "Big Al's Gun Shop", 80, 'HEG x8', {camera:false,guard:false}, I('HEG',8))
     ];
+
+    /*
+     * Exact Shoplifting unique-result mapping.
+     *
+     * Torn's /torn/crimes metadata provides Shoplifting's ordered
+     * unique_outcomes_ids array. The official Shoplifting unique tables contain
+     * exactly 58 outcomes in the same shop/order sequence. Using the actual
+     * unique IDs avoids unreliable reward-based matching (money ranges, points,
+     * duplicate reward shapes, etc.).
+     */
+    var SHOP_RULE_OUTCOME_INDEX = {
+        'sally-jawbreaker': 0,
+        'sally-empty-box': 1,
+        'sally-pixie': 2,
+        'sally-sherbet': 3,
+        'sally-treats': 4,
+
+        'bits-champagne': 5,
+        'bits-duct': 8,
+        'bits-cash': 10,
+
+        'tc-raincoat': 12,
+        'tc-tailor': 14,
+        'tc-bush': 18,
+        'tc-poncho': 20,
+
+        'super-dslr': 21,
+        'super-dvd': 22,
+        'super-dongle': 24,
+        'super-keyboard': 25,
+
+        'pharm-melatonin': 28,
+        'pharm-medical': 29,
+        'pharm-tyrosine': 30,
+        'pharm-epi': 31,
+        'pharm-serotonin': 32,
+
+        'cyber-points': 33,
+        'cyber-cash': 34,
+        'cyber-rf': 35,
+        'cyber-hpcpu': 36,
+        'cyber-parts': 37,
+        'cyber-chair': 38,
+
+        'jewel-tooth': 39,
+        'jewel-diamond-latex': 40,
+        'jewel-ivory': 41,
+        'jewel-knife': 42,
+        'jewel-mirror': 43,
+        'jewel-grinding': 46,
+        'jewel-drill': 47,
+        'jewel-cluster': 48,
+
+        'al-ammo': 49,
+        'al-armor': 50,
+        'al-ninja': 51,
+        'al-deagle': 52,
+        'al-stick': 53,
+        'al-steyr': 54,
+        'al-knives': 55,
+        'al-heg': 56
+    };
 
     /*
      * Time-sensitive Search for Cash uniques.
@@ -666,7 +728,7 @@
 
         return 'Connected.\n' +
             'Shoplifting: skill ' + apiProfile.skill + ' · ' + apiProfile.completedCount + ' / ' + apiProfile.total + ' uniques · ' + slRemaining + ' missing\n' +
-            'SL time-window uniques recognized as completed: ' + apiProfile.matchedKeys.size + ' / ' + SHOP_RULES.length + '\n' +
+            'SL time-window uniques recognized as completed: ' + apiProfile.matchedKeys.size + ' / ' + SHOP_RULES.length + ' (' + (apiProfile.matchSource || 'unknown') + ')' + '\n' +
             'Search for Cash: skill ' + sfcProfile.skill + ' · ' + sfcProfile.completedCount + ' / ' + sfcProfile.total + ' uniques · ' + sfcRemaining + ' missing\n' +
             'SFC time-window uniques recognized as completed: ' + sfcProfile.matchedKeys.size + ' / ' + SFC_RULES.length + '\n' +
             'Polling every: ' + pollSeconds + ' seconds';
@@ -729,14 +791,28 @@
             });
 
             return fetchItemNames(itemIds).then(function (itemNames) {
-                var matched = matchCompleted(uniques, itemNames);
+                var matched = matchCompletedShoplifting(
+                    uniques,
+                    shopCrime.unique_outcomes_ids
+                );
+                var matchSource = 'unique IDs';
+
+                // Defensive fallback for a future API response that omits/reorders
+                // the unique ID list. Current Torn metadata supplies all 58 IDs.
+                if (!matched) {
+                    matched = matchCompleted(uniques, itemNames);
+                    matchSource = 'reward fallback';
+                }
+
                 apiProfile = {
                     crimeId: shopCrime.id,
                     total: shopCrime.unique_outcomes_count || 58,
                     skill: crimeData.skill,
                     completedCount: uniques.length,
                     matchedKeys: matched,
+                    matchSource: matchSource,
                     subNames: subNames,
+                    uniqueOutcomeIds: shopCrime.unique_outcomes_ids || [],
                     syncedAt: Date.now()
                 };
                 apiLastError = '';
@@ -868,6 +944,29 @@
         // endpoint to identify a specific unique safely.
         if (a.type === 'zero') return false;
         return false;
+    }
+
+    function matchCompletedShoplifting(uniques, uniqueOutcomeIds) {
+        var matched = new Set();
+        var completedIds = new Set(
+            (uniques || []).map(function (u) { return Number(u.id); })
+        );
+
+        if (!Array.isArray(uniqueOutcomeIds) || uniqueOutcomeIds.length < 58) {
+            return null;
+        }
+
+        SHOP_RULES.forEach(function (rule) {
+            var index = SHOP_RULE_OUTCOME_INDEX[rule.key];
+            if (!Number.isInteger(index)) return;
+
+            var resultId = Number(uniqueOutcomeIds[index]);
+            if (resultId && completedIds.has(resultId)) {
+                matched.add(rule.key);
+            }
+        });
+
+        return matched;
     }
 
     function matchCompletedRules(uniques, itemNames, rules) {
