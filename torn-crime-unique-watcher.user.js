@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.6
-// @description  Shop-aware Shoplifting + Search for Cash API alerts, live unique detection, collapsible watcher.
+// @version      0.3.7
+// @description  Shoplifting + Search for Cash API alerts with completion diagnostics, plus live unique detection.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -109,23 +109,6 @@
         R('al-steyr', "Big Al's Gun Shop", 60, 'Steyr AUG', {guard:true}, I('Steyr AUG',1)),
         R('al-knives', "Big Al's Gun Shop", 70, 'Throwing Knives x4', {camera:true}, I('Throwing Knife',4)),
         R('al-heg', "Big Al's Gun Shop", 80, 'HEG x8', {camera:false,guard:false}, I('HEG',8))
-    ];
-
-    /*
-     * Shoplifting unique IDs are grouped by shop in Torn's crime metadata, but
-     * the order inside each shop is not the same as the visual/wiki card order.
-     * We therefore use these group boundaries only to identify the shop, then
-     * identify a completed rule from its reward data inside that shop.
-     */
-    var SHOP_OUTCOME_GROUPS = [
-        {shop:"Sally's Sweet Shop", start:0, count:5},
-        {shop:"Bits 'n' Bobs", start:5, count:7},
-        {shop:'TC Clothing', start:12, count:9},
-        {shop:'Super Store', start:21, count:7},
-        {shop:'Pharmacy', start:28, count:5},
-        {shop:'Cyber Force', start:33, count:6},
-        {shop:'Jewelry Store', start:39, count:10},
-        {shop:"Big Al's Gun Shop", start:49, count:9}
     ];
 
     /*
@@ -680,13 +663,24 @@
 
         var slRemaining = Math.max(0, apiProfile.total - apiProfile.completedCount);
         var sfcRemaining = Math.max(0, sfcProfile.total - sfcProfile.completedCount);
+        var missing = missingShopRules(apiProfile);
 
-        return 'Connected.\n' +
-            'Shoplifting: skill ' + apiProfile.skill + ' · ' + apiProfile.completedCount + ' / ' + apiProfile.total + ' uniques · ' + slRemaining + ' missing\n' +
-            'SL time-window uniques recognized as completed: ' + apiProfile.matchedKeys.size + ' / ' + SHOP_RULES.length + ' (' + (apiProfile.matchSource || 'unknown') + ')' + '\n' +
+        var text = 'Connected.\n' +
+            'Shoplifting: skill ' + apiProfile.skill + ' · ' + apiProfile.completedCount + ' / ' + apiProfile.total + ' uniques · ' + slRemaining + ' missing overall\n' +
+            'SL watched uniques recognized as completed: ' + apiProfile.matchedKeys.size + ' / ' + SHOP_RULES.length + ' (' + (apiProfile.matchSource || 'unknown') + ')\n' +
             'Search for Cash: skill ' + sfcProfile.skill + ' · ' + sfcProfile.completedCount + ' / ' + sfcProfile.total + ' uniques · ' + sfcRemaining + ' missing\n' +
-            'SFC time-window uniques recognized as completed: ' + sfcProfile.matchedKeys.size + ' / ' + SFC_RULES.length + '\n' +
             'Polling every: ' + pollSeconds + ' seconds';
+
+        if (missing.length) {
+            text += '\n\nWatcher thinks you are missing:\n' +
+                missing.map(function (rule) {
+                    return '• ' + rule.shop + ' — ' + rule.label;
+                }).join('\n');
+        } else {
+            text += '\n\nWatcher thinks all monitored Shoplifting uniques are complete.';
+        }
+
+        return text;
     }
 
     function apiGet(path) {
@@ -746,28 +740,15 @@
             });
 
             return fetchItemNames(itemIds).then(function (itemNames) {
-                var matched = matchCompletedShoplifting(
-                    uniques,
-                    itemNames,
-                    shopCrime.unique_outcomes_ids
-                );
-                var matchSource = 'shop-group + reward';
-
-                // Defensive fallback if Torn ever omits the full 58-ID metadata list.
-                if (!matched) {
-                    matched = matchCompleted(uniques, itemNames);
-                    matchSource = 'reward fallback';
-                }
-
+                var matched = matchCompleted(uniques, itemNames);
                 apiProfile = {
                     crimeId: shopCrime.id,
                     total: shopCrime.unique_outcomes_count || 58,
                     skill: crimeData.skill,
                     completedCount: uniques.length,
                     matchedKeys: matched,
-                    matchSource: matchSource,
+                    matchSource: 'reward matcher v2',
                     subNames: subNames,
-                    uniqueOutcomeIds: shopCrime.unique_outcomes_ids || [],
                     syncedAt: Date.now()
                 };
                 apiLastError = '';
@@ -914,106 +895,62 @@
         if (!a || !b || a.type !== b.type) return false;
         if (a.type === 'items') return a.sig === b.sig;
         if (a.type === 'money') {
-            var minClose = Math.abs(Number(a.min) - Number(b.min)) <= 1000;
-            var maxClose = Math.abs(Number(a.max) - Number(b.max)) <= 1000;
-            return minClose && maxClose;
+            return Number(a.min) === Number(b.min) && Number(a.max) === Number(b.max);
         }
-        if (a.type === 'ammo') return Number(a.amount) === Number(b.amount) && norm(a.ammoType).indexOf(norm(b.ammoType)) !== -1;
-        // Rewards such as points are not represented distinctly enough in this
-        // endpoint to identify a specific unique safely.
-        if (a.type === 'zero') return false;
+        if (a.type === 'ammo') {
+            return Number(a.amount) === Number(b.amount) &&
+                norm(a.ammoType).indexOf(norm(b.ammoType)) !== -1;
+        }
         return false;
     }
 
-    function shopOutcomeSets(uniqueOutcomeIds) {
-        if (!Array.isArray(uniqueOutcomeIds) || uniqueOutcomeIds.length < 58) {
-            return null;
+    function shopRuleRewardMatches(rule, descriptor) {
+        if (!descriptor) return false;
+
+        // Torn's user-crime unique schema has no "points" reward field.
+        // Cyber Force's 3-9 Points result therefore appears rewardless.
+        if (rule.key === 'cyber-points') {
+            return descriptor.type === 'zero';
         }
 
-        var sets = {};
-        SHOP_OUTCOME_GROUPS.forEach(function (g) {
-            sets[norm(g.shop)] = new Set(
-                uniqueOutcomeIds.slice(g.start, g.start + g.count).map(Number)
-            );
-        });
-        return sets;
-    }
+        // Shoplifting has two watched money uniques. Their scales are far apart,
+        // so magnitude is more robust than trusting an exact min/max pair.
+        if (rule.key === 'bits-cash') {
+            return descriptor.type === 'money' &&
+                Number(descriptor.max) > 0 &&
+                Number(descriptor.max) < 100000;
+        }
 
-    function matchCompletedShoplifting(uniques, itemNames, uniqueOutcomeIds) {
-        var sets = shopOutcomeSets(uniqueOutcomeIds);
-        if (!sets) return null;
+        if (rule.key === 'cyber-cash') {
+            return descriptor.type === 'money' &&
+                Number(descriptor.min) >= 100000;
+        }
 
-        var descriptors = (uniques || []).map(function (u) {
-            return {
-                id: Number(u.id),
-                reward: userRewardDescriptor(u.rewards, itemNames)
-            };
-        });
-
-        var usedIds = new Set();
-        var matched = new Set();
-
-        SHOP_RULES.forEach(function (rule) {
-            var shopSet = sets[norm(rule.shop)];
-            if (!shopSet) return;
-
-            var idx = descriptors.findIndex(function (d) {
-                if (usedIds.has(d.id) || !shopSet.has(d.id)) return false;
-
-                // Points are not represented in UserCrimeUniquesReward. The only
-                // rewardless time-window unique in Cyber Force is its 3-9 Points
-                // outcome, so a rewardless completed Cyber unique identifies it.
-                if (rule.key === 'cyber-points') {
-                    return d.reward && d.reward.type === 'zero';
-                }
-
-                return rewardMatches(
-                    d.reward,
-                    ruleRewardDescriptor(rule)
-                );
-            });
-
-            if (idx !== -1) {
-                matched.add(rule.key);
-                usedIds.add(descriptors[idx].id);
-            }
-        });
-
-        return matched;
+        return rewardMatches(
+            descriptor,
+            ruleRewardDescriptor(rule)
+        );
     }
 
     function matchCompletedRules(uniques, itemNames, rules) {
         var matched = new Set();
         var descriptors = uniques.map(function (u) {
             return {
-                id: u.id,
+                id: Number(u.id),
                 reward: userRewardDescriptor(u.rewards, itemNames)
             };
         });
 
-        rules.forEach(function (rule) {
-            var idx = -1;
+        var used = new Set();
 
-            // Torn's unique reward schema exposes items, money and ammo, but not
-            // points. Shoplifting currently has one time-window unique whose reward
-            // is points: Cyber Force's 3-9 Points result. A completed version of
-            // that unique therefore appears as a unique with no supported reward
-            // payload. Treat that lone rewardless Shoplifting unique as the points
-            // completion instead of permanently assuming the player still needs it.
-            if (rule.key === 'cyber-points') {
-                idx = descriptors.findIndex(function (d) {
-                    return d.reward && d.reward.type === 'zero';
-                });
-            } else {
-                var target = ruleRewardDescriptor(rule);
-                idx = descriptors.findIndex(function (d) {
-                    return rewardMatches(d.reward, target);
-                });
-            }
+        rules.forEach(function (rule) {
+            var idx = descriptors.findIndex(function (d, i) {
+                return !used.has(i) && shopRuleRewardMatches(rule, d.reward);
+            });
 
             if (idx !== -1) {
                 matched.add(rule.key);
-                descriptors.splice(idx, 1);
+                used.add(idx);
             }
         });
 
@@ -1022,6 +959,15 @@
 
     function matchCompleted(uniques, itemNames) {
         return matchCompletedRules(uniques, itemNames, SHOP_RULES);
+    }
+
+    function missingShopRules(profile) {
+        if (!profile) return [];
+
+        return SHOP_RULES.filter(function (rule) {
+            return profile.skill >= rule.skill &&
+                !profile.matchedKeys.has(rule.key);
+        });
     }
 
     function shopState(entry) {
