@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.7
+// @version      0.3.8
 // @description  Shoplifting + Search for Cash API alerts with completion diagnostics, plus live unique detection.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -98,7 +98,7 @@
         R('jewel-knife', 'Jewelry Store', 60, 'Diamond Bladed Knife', {guard:true}, I('Diamond Bladed Knife',1)),
         R('jewel-mirror', 'Jewelry Store', 10, 'Vanity Hand Mirror', {camera:true,guard:true}, I('Vanity Hand Mirror',1)),
         R('jewel-grinding', 'Jewelry Store', 1, 'Diamond Ring + Grinding Stone', {camera:true}, IS([['Diamond Ring',1],['Grinding Stone',1]])),
-        R('jewel-drill', 'Jewelry Store', 1, 'Gold Rings + Drill + Polishing Pad', {camera:true}, IS([['Gold Ring',2],['Drill',1],['Polishing Pad',1]])),
+        R('jewel-drill', 'Jewelry Store', 1, '2 Gold Rings + Hand Drill + Polishing Pad', {camera:true}, IS([['Gold Ring',2],['Hand Drill',1],['Polishing Pad',1]])),
         R('jewel-cluster', 'Jewelry Store', 100, 'Cluster Ring', {camera:true,guard:true}, I('Cluster Ring',1), 'Also requires zero notoriety.'),
 
         R('al-ammo', "Big Al's Gun Shop", 1, '2,500 Special Ammo', {camera:true,guard:true}, A(2500,'special')),
@@ -861,7 +861,9 @@
             'syringes':'syringe',
             'computer fans':'computer fan',
             'bottles of champagne':'bottle of champagne',
-            'bags of sherbet':'bag of sherbet'
+            'bags of sherbet':'bag of sherbet',
+            'hand drill':'drill',
+            'drill':'drill'
         };
 
         return aliases[n] || n;
