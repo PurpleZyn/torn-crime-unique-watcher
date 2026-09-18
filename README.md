@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.4.user.js)
+[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.5.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -108,7 +108,7 @@ The script:
 
 ## Current version
 
-**v0.3.4**
+**v0.3.5**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -117,6 +117,9 @@ v0.3.2 fixes live unique row identification for Shoplifting, Pickpocketing, and 
 v0.3.2 prevents post-action duplicate alerts by preserving the active row identity while Torn renders the crime result. Shoplifting rows now use stable visual row indexes, avoiding neighboring-shop mislabels such as Cyber Force vs Jewelry Store. The watcher pill can also be minimized to a small `★`, and that state is remembered.
 
 v0.3.4 changes the pill interaction so a normal click minimizes/expands it. Mute/unmute now has its own speaker button, and settings has its own gear button. This build also includes the Cyber Force 3–9 Points completion fix and the post-action duplicate-alert suppression from v0.3.3.
+
+
+v0.3.5 replaces Shoplifting reward-guessing with exact unique-result-ID matching. Torn exposes both each completed unique result ID and the ordered list of all 58 Shoplifting unique IDs, so completed time-window outcomes are now filtered by their actual IDs instead of inferred reward contents. This fixes false alerts for already-completed outcomes such as Bits 'n' Bobs cash and Cyber Force points. The post-action duplicate suppression and click-to-minimize pill behavior remain included.
 
 ## Disclaimer
 
