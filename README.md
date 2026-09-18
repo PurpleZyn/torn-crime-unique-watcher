@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.6.user.js)
+[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.7.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -108,7 +108,7 @@ The script:
 
 ## Current version
 
-**v0.3.6**
+**v0.3.7**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -123,6 +123,9 @@ v0.3.5 replaces Shoplifting reward-guessing with exact unique-result-ID matching
 
 
 v0.3.6 fixes Shoplifting completion filtering again, this time without assuming that Torn's unique IDs are ordered the same way as the UI/wiki cards. IDs are used only to determine which shop a completed unique belongs to; the completed reward is then matched within that shop. Item-name normalization also handles variants such as Ninja Star/Ninja Stars. This replaces the incorrect v0.3.5 within-shop index mapping.
+
+
+v0.3.7 backs out the incorrect v0.3.5/v0.3.6 unique-ID ordering/grouping assumptions. Shoplifting completion filtering is again reward-based, with explicit handling for the two money uniques and Cyber Force's points unique plus normalized item names. Settings now shows `Watcher thinks you are missing:` so completion filtering can be verified immediately instead of waiting for a live security window.
 
 ## Disclaimer
 
