@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.8.user.js)
+[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.9.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -108,7 +108,7 @@ The script:
 
 ## Current version
 
-**v0.3.8**
+**v0.3.9**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -129,6 +129,9 @@ v0.3.7 backs out the incorrect v0.3.5/v0.3.6 unique-ID ordering/grouping assumpt
 
 
 v0.3.8 fixes the Jewelry Store reward matcher for Torn's 2024 item rename from `Drill` to `Hand Drill`. This removes the false `2 Gold Rings + Hand Drill + Polishing Pad` missing result when that unique is already completed.
+
+
+v0.3.9 fixes the Jewelry Store `Diamond Bladed Knife` window. The watcher previously checked only for the guard being on break; it now also requires the cameras to still be recording before alerting.
 
 ## Disclaimer
 
