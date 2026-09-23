@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.8
+// @version      0.3.9
 // @description  Shoplifting + Search for Cash API alerts with completion diagnostics, plus live unique detection.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -95,7 +95,7 @@
         R('jewel-tooth', 'Jewelry Store', 20, 'Gold Tooth x12', {guard:false}, I('Gold Tooth',12)),
         R('jewel-diamond-latex', 'Jewelry Store', 40, 'Diamond Ring + Latex Gloves', {guard:false}, IS([['Diamond Ring',1],['Latex Gloves',1]])),
         R('jewel-ivory', 'Jewelry Store', 40, 'Raw Ivory', {camera:false,guard:false}, I('Raw Ivory',1)),
-        R('jewel-knife', 'Jewelry Store', 60, 'Diamond Bladed Knife', {guard:true}, I('Diamond Bladed Knife',1)),
+        R('jewel-knife', 'Jewelry Store', 60, 'Diamond Bladed Knife', {camera:false,guard:true}, I('Diamond Bladed Knife',1)),
         R('jewel-mirror', 'Jewelry Store', 10, 'Vanity Hand Mirror', {camera:true,guard:true}, I('Vanity Hand Mirror',1)),
         R('jewel-grinding', 'Jewelry Store', 1, 'Diamond Ring + Grinding Stone', {camera:true}, IS([['Diamond Ring',1],['Grinding Stone',1]])),
         R('jewel-drill', 'Jewelry Store', 1, '2 Gold Rings + Hand Drill + Polishing Pad', {camera:true}, IS([['Gold Ring',2],['Hand Drill',1],['Polishing Pad',1]])),
