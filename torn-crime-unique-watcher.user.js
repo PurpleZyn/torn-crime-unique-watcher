@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.4.0
+// @version      0.4.1
 // @description  Native-sidebar crime unique watcher for Shoplifting, Search for Cash, and Pickpocketing.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -571,15 +571,15 @@
             apiLastError = '';
             sfcLastError = '';
             status.textContent = 'Testing API and syncing Shoplifting + Search for Cash…';
-            updatePill();
+            updateStatusUi();
             syncAllProfiles(true).then(function () {
                 startApiMonitor();
                 status.textContent = settingsStatusText();
-                updatePill();
+                updateStatusUi();
             }).catch(function (err) {
                 apiLastError = err.message || String(err);
                 status.textContent = 'API setup failed:\n' + apiLastError + '\n\nMake sure the key has Minimal Access.';
-                updatePill();
+                updateStatusUi();
             });
         });
 
@@ -597,7 +597,7 @@
             stopApiMonitor();
             keyInput.value = '';
             status.textContent = 'API key cleared. Pickpocketing/page-based watching still works.';
-            updatePill();
+            updateStatusUi();
         });
 
         var testSfc = document.createElement('button');
@@ -735,7 +735,7 @@
                     syncedAt: Date.now()
                 };
                 apiLastError = '';
-                updatePill();
+                updateStatusUi();
                 return apiProfile;
             });
         });
@@ -796,7 +796,7 @@
                     syncedAt: Date.now()
                 };
                 sfcLastError = '';
-                updatePill();
+                updateStatusUi();
                 return sfcProfile;
             });
         }).catch(function (err) {
@@ -1019,10 +1019,10 @@
             var onShopPage = currentCrime() === 'Shoplifting' && foreground();
             if (!onShopPage && newly.length) notifyApiRules(newly);
 
-            updatePill();
+            updateStatusUi();
         }).catch(function (err) {
             apiLastError = err.message || String(err);
-            updatePill();
+            updateStatusUi();
         }).finally(function () {
             apiChecking = false;
         });
@@ -1067,7 +1067,7 @@
                 sfcActive.clear();
                 sfcLastError = '';
                 sfcLastCheck = Date.now();
-                updatePill();
+                updateStatusUi();
                 return null;
             }
 
@@ -1108,10 +1108,10 @@
             var onSfcPage = currentCrime() === 'Search for Cash' && foreground();
             if (!onSfcPage && newly.length) notifySfcRules(newly);
 
-            updatePill();
+            updateStatusUi();
         }).catch(function (err) {
             sfcLastError = err.message || String(err);
-            updatePill();
+            updateStatusUi();
         });
     }
 
@@ -1351,12 +1351,12 @@
 
     function refreshLifecycle() {
         addStyle();
-        ensurePill();
+        ensureStatusUi();
 
         var c = currentCrime();
         if (!c || !foreground()) {
             stopPageWatcher();
-            updatePill();
+            updateStatusUi();
             return;
         }
 
@@ -1370,7 +1370,7 @@
             });
         }
         schedulePageScan();
-        updatePill();
+        updateStatusUi();
     }
 
     document.addEventListener('click', function (e) {
@@ -1410,17 +1410,19 @@
     }, 500);
 
     addStyle();
-    ensurePill();
+    localStorage.removeItem(PREFIX + '-pill-position');
+    localStorage.removeItem(PREFIX + '-pill-minimized');
+    ensureStatusUi();
     refreshLifecycle();
 
     if (getKey()) {
         syncAllProfiles(false)
             .catch(function (err) {
                 apiLastError = err.message || String(err);
-                updatePill();
+                updateStatusUi();
             })
             .finally(startApiMonitor);
     } else {
-        updatePill();
+        updateStatusUi();
     }
 }());
