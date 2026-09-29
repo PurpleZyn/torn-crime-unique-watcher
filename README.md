@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.4.0](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.4.0.user.js)
+[Install v0.4.1](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.4.1.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -123,7 +123,7 @@ The script:
 
 ## Current version
 
-**v0.4.0**
+**v0.4.1**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -149,6 +149,8 @@ v0.3.8 fixes the Jewelry Store reward matcher for Torn's 2024 item rename from `
 v0.3.9 fixes the Jewelry Store `Diamond Bladed Knife` window. The watcher previously checked only for the guard being on break; it now also requires the cameras to still be recording before alerting.
 
 v0.4.0 replaces the floating/draggable pill with a native-looking **Uniques:** status row inside Torn's left Information panel, positioned after the OC/Chain area. Clicking the row opens settings, sound/volume controls now live inside settings, and active alerts temporarily change the sidebar status to **★ READY**. A small fallback button remains available when the sidebar cannot be mounted on narrow/mobile layouts.
+
+v0.4.1 fixes a regression introduced by the v0.4.0 sidebar rewrite. Several old `ensurePill()` / `updatePill()` calls were left behind after the floating pill was removed, causing startup/settings actions to stop with a JavaScript error. All stale pill references are now removed and the native sidebar UI/API sync path uses `ensureStatusUi()` / `updateStatusUi()` consistently.
 
 ## Disclaimer
 
