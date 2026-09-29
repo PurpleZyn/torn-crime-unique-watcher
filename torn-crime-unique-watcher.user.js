@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.3.9
-// @description  Shoplifting + Search for Cash API alerts with completion diagnostics, plus live unique detection.
+// @version      0.4.0
+// @description  Native-sidebar crime unique watcher for Shoplifting, Search for Cash, and Pickpocketing.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
 // @supportURL   https://github.com/PurpleZyn/torn-crime-unique-watcher/issues
@@ -45,9 +45,9 @@
     var sfcLastError = '';
     var sfcLastCheck = 0;
 
-    var pillDragging = false;
-    var suppressPillClick = false;
-    var pillMinimized = localStorage.getItem(PREFIX + '-pill-minimized') === '1';
+    var statusMountTimer = null;
+    var statusAlertUntil = 0;
+    var statusAlertLabel = '';
     var pageActionGraceUntil = 0;
 
     /*
@@ -198,15 +198,15 @@
         var s = document.createElement('style');
         s.id = PREFIX + '-style';
         s.textContent =
-            '#tcuw-pill{position:fixed;right:12px;bottom:12px;z-index:2147483646;display:flex;align-items:center;gap:7px;padding:8px 9px 8px 11px;border:1px solid #d6a92f;border-radius:20px;background:rgba(25,25,28,.96);color:#fff;font:600 12px Arial;cursor:move;box-shadow:0 4px 15px #0008;user-select:none;touch-action:none}' +
-            '#tcuw-pill-label{white-space:nowrap;cursor:pointer}' +
-            '#tcuw-pill-controls{display:flex;align-items:center;gap:4px}' +
-            '#tcuw-pill .tcuw-pill-btn{width:24px;height:24px;padding:0!important;border:0!important;border-radius:50%;background:#ffffff12!important;color:#ddd!important;font:700 13px/24px Arial!important;cursor:pointer!important}' +
-            '#tcuw-pill .tcuw-pill-btn:hover{background:#ffffff24!important;color:#fff!important}' +
-            '#tcuw-pill.mini{padding:5px 9px;border-radius:50%;gap:0}' +
-            '#tcuw-pill.mini #tcuw-pill-label{display:inline;font-size:17px;color:#ffd15a}' +
-            '#tcuw-pill.mini #tcuw-pill-controls{display:none}' +
-            '#tcuw-pill.warn{border-color:#d76b55}' +
+            '#tcuw-sidebar-row{box-sizing:border-box;width:100%;min-height:18px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:1px 8px;color:#ddd;font:12px/16px Arial,sans-serif;cursor:pointer;user-select:none}' +
+            '#tcuw-sidebar-row:hover{background:rgba(255,255,255,.055)}' +
+            '#tcuw-sidebar-row .tcuw-side-name{font-weight:700;color:#ddd}' +
+            '#tcuw-sidebar-row .tcuw-side-value{margin-left:auto;text-align:right;white-space:nowrap;color:#aaa;font-variant-numeric:tabular-nums}' +
+            '#tcuw-sidebar-row.ready .tcuw-side-name,#tcuw-sidebar-row.ready .tcuw-side-value{color:#ffd35a}' +
+            '#tcuw-sidebar-row.warn .tcuw-side-value{color:#e58b72}' +
+            '#tcuw-sidebar-fallback{position:fixed;right:8px;bottom:8px;z-index:2147483646;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid #d6a92f;border-radius:50%;background:rgba(25,25,28,.96);color:#ffd15a;font:700 17px Arial;cursor:pointer;box-shadow:0 4px 15px #0008}' +
+            '#tcuw-sidebar-fallback.warn{border-color:#d76b55;color:#e58b72}' +
+            '#tcuw-sidebar-fallback.ready{box-shadow:0 0 0 2px #d6a92f,0 4px 15px #0008}' +
             '#tcuw-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2147483647;width:min(560px,calc(100vw - 28px));padding:14px;border:1px solid #f0be36;border-radius:9px;background:#17171af7;color:#fff;text-align:center;font:600 14px Arial;box-shadow:0 8px 28px #000a}' +
             '#tcuw-toast b{color:#ffd75e}#tcuw-toast span{display:block;margin-top:5px;font-weight:400;white-space:pre-line}' +
             '#tcuw-flash{position:fixed;inset:0;z-index:2147483645;pointer-events:none;box-sizing:border-box;animation:tcuwflash 1.4s ease-out}' +
@@ -222,241 +222,187 @@
         document.head.appendChild(s);
     }
 
-    function ensurePill() {
-        var p = document.getElementById(PREFIX + '-pill');
-        if (p) return p;
+    function smallestSidebarTextElement(pattern) {
+        var root = document.querySelector('#sidebarroot');
+        if (!root) return null;
 
-        p = document.createElement('div');
-        p.id = PREFIX + '-pill';
-        restorePillPosition(p);
+        var all = root.querySelectorAll('*');
+        var best = null;
 
-        var label = document.createElement('span');
-        label.id = PREFIX + '-pill-label';
+        for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (el.id === PREFIX + '-sidebar-row') continue;
 
-        var controls = document.createElement('span');
-        controls.id = PREFIX + '-pill-controls';
+            var text = clean(el.textContent || '');
+            if (!pattern.test(text)) continue;
 
-        var soundBtn = document.createElement('button');
-        soundBtn.type = 'button';
-        soundBtn.id = PREFIX + '-pill-sound';
-        soundBtn.className = 'tcuw-pill-btn';
-        soundBtn.title = 'Mute / unmute alerts';
-        soundBtn.addEventListener('pointerdown', function (e) {
-            e.stopPropagation();
-        });
-        soundBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            primeAudio();
-            soundOn = !soundOn;
-            localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
-            updatePill();
-        });
+            if (!best || (el.textContent || '').length < (best.textContent || '').length) {
+                best = el;
+            }
+        }
 
-        var settingsBtn = document.createElement('button');
-        settingsBtn.type = 'button';
-        settingsBtn.id = PREFIX + '-pill-settings';
-        settingsBtn.className = 'tcuw-pill-btn';
-        settingsBtn.textContent = '⚙';
-        settingsBtn.title = 'Watcher settings';
-        settingsBtn.addEventListener('pointerdown', function (e) {
-            e.stopPropagation();
-        });
-        settingsBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            openSettings();
-        });
+        return best;
+    }
 
-        controls.append(soundBtn, settingsBtn);
-        p.append(label, controls);
+    function sidebarAnchorRow() {
+        var root = document.querySelector('#sidebarroot');
+        if (!root) return null;
 
-        p.addEventListener('pointerdown', beginPillDrag);
+        // Prefer Torn's OC timer because this is exactly where the user asked for
+        // the watcher to live. Fall back to Chain if no OC line is currently shown.
+        var leaf = smallestSidebarTextElement(/^OC:\s*/i) ||
+            smallestSidebarTextElement(/^Chain:\s*/i);
 
-        p.addEventListener('click', function (e) {
-            if (suppressPillClick) {
-                suppressPillClick = false;
-                return;
+        if (!leaf) return null;
+
+        var cur = leaf;
+        var best = leaf;
+
+        for (var i = 0; cur && cur !== root && i < 8; i++, cur = cur.parentElement) {
+            var rect = cur.getBoundingClientRect();
+
+            if (rect.width >= 120 && rect.height >= 12 && rect.height <= 34) {
+                best = cur;
             }
 
-            primeAudio();
+            if (rect.height > 44) break;
+        }
 
-            if (e.altKey) {
+        return best;
+    }
+
+    function ensureStatusUi() {
+        addStyle();
+
+        var existing = document.getElementById(PREFIX + '-sidebar-row');
+        if (existing && existing.isConnected) return existing;
+
+        var anchor = sidebarAnchorRow();
+
+        if (anchor && anchor.parentElement) {
+            var row = document.createElement('div');
+            row.id = PREFIX + '-sidebar-row';
+            row.title = 'Torn Crime Unique Watcher — click for settings';
+
+            var name = document.createElement('span');
+            name.className = 'tcuw-side-name';
+            name.textContent = 'Uniques:';
+
+            var value = document.createElement('span');
+            value.className = 'tcuw-side-value';
+
+            row.append(name, value);
+            row.addEventListener('click', function () {
+                primeAudio();
                 openSettings();
-                return;
-            }
+            });
 
-            if (e.shiftKey) {
-                alertUser('TEST ALERT', 'Watcher sound is ' + Math.round(volume * 100) + '%.', true, false);
-                return;
-            }
+            anchor.insertAdjacentElement('afterend', row);
 
-            if (e.ctrlKey) {
-                cycleVolume();
-                updatePill();
-                alertUser('TEST ALERT', 'Alert volume set to ' + Math.round(volume * 100) + '%.', true, false);
-                return;
-            }
+            var fallback = document.getElementById(PREFIX + '-sidebar-fallback');
+            if (fallback) fallback.remove();
 
-            // Normal click is now dedicated to minimize / expand.
-            pillMinimized = !pillMinimized;
-            localStorage.setItem(PREFIX + '-pill-minimized', pillMinimized ? '1' : '0');
-            updatePill();
-            clampPillToViewport(p);
-        });
-
-        document.body.appendChild(p);
-        updatePill();
-        clampPillToViewport(p);
-        return p;
-    }
-
-    function beginPillDrag(e) {
-        if (e.button !== 0) return;
-
-        var p = e.currentTarget;
-        var rect = p.getBoundingClientRect();
-        var startX = e.clientX;
-        var startY = e.clientY;
-        var originLeft = rect.left;
-        var originTop = rect.top;
-        var moved = false;
-
-        pillDragging = true;
-        p.setPointerCapture(e.pointerId);
-
-        function move(ev) {
-            var dx = ev.clientX - startX;
-            var dy = ev.clientY - startY;
-
-            if (!moved && Math.hypot(dx, dy) >= 5) moved = true;
-            if (!moved) return;
-
-            var maxLeft = Math.max(0, window.innerWidth - p.offsetWidth);
-            var maxTop = Math.max(0, window.innerHeight - p.offsetHeight);
-            var left = Math.min(maxLeft, Math.max(0, originLeft + dx));
-            var top = Math.min(maxTop, Math.max(0, originTop + dy));
-
-            p.style.left = left + 'px';
-            p.style.top = top + 'px';
-            p.style.right = 'auto';
-            p.style.bottom = 'auto';
+            return row;
         }
 
-        function end(ev) {
-            try { p.releasePointerCapture(ev.pointerId); } catch (_) {}
-            p.removeEventListener('pointermove', move);
-            p.removeEventListener('pointerup', end);
-            p.removeEventListener('pointercancel', end);
-            pillDragging = false;
-
-            if (moved) {
-                suppressPillClick = true;
-                savePillPosition(p);
-                setTimeout(function () { suppressPillClick = false; }, 250);
-            }
+        // Narrow/PDA layouts can hide or rebuild the Information section. Keep a
+        // tiny settings/health indicator available until the native row exists.
+        var fallback = document.getElementById(PREFIX + '-sidebar-fallback');
+        if (!fallback) {
+            fallback = document.createElement('div');
+            fallback.id = PREFIX + '-sidebar-fallback';
+            fallback.textContent = '★';
+            fallback.title = 'Torn Crime Unique Watcher — click for settings';
+            fallback.addEventListener('click', function () {
+                primeAudio();
+                openSettings();
+            });
+            document.body.appendChild(fallback);
         }
 
-        p.addEventListener('pointermove', move);
-        p.addEventListener('pointerup', end);
-        p.addEventListener('pointercancel', end);
+        return fallback;
     }
 
-    function savePillPosition(p) {
-        var rect = p.getBoundingClientRect();
-        localStorage.setItem(PREFIX + '-pill-position', JSON.stringify({
-            left: Math.round(rect.left),
-            top: Math.round(rect.top)
-        }));
+    function scheduleStatusUiMount() {
+        if (statusMountTimer) return;
+
+        statusMountTimer = setTimeout(function () {
+            statusMountTimer = null;
+            ensureStatusUi();
+            updateStatusUi();
+        }, 120);
     }
 
-    function restorePillPosition(p) {
-        try {
-            var raw = localStorage.getItem(PREFIX + '-pill-position');
-            if (!raw) return;
-            var pos = JSON.parse(raw);
-            if (!Number.isFinite(pos.left) || !Number.isFinite(pos.top)) return;
-
-            p.style.left = pos.left + 'px';
-            p.style.top = pos.top + 'px';
-            p.style.right = 'auto';
-            p.style.bottom = 'auto';
-        } catch (_) {}
-    }
-
-    function clampPillToViewport(p) {
-        if (!p || !p.isConnected) return;
-        var rect = p.getBoundingClientRect();
-        var left = Math.min(Math.max(0, rect.left), Math.max(0, window.innerWidth - p.offsetWidth));
-        var top = Math.min(Math.max(0, rect.top), Math.max(0, window.innerHeight - p.offsetHeight));
-
-        if (p.style.left || p.style.top) {
-            p.style.left = left + 'px';
-            p.style.top = top + 'px';
-            p.style.right = 'auto';
-            p.style.bottom = 'auto';
-            savePillPosition(p);
-        }
-    }
-
-    function resetPillPosition() {
-        localStorage.removeItem(PREFIX + '-pill-position');
-        var p = document.getElementById(PREFIX + '-pill');
-        if (!p) return;
-        p.style.left = '';
-        p.style.top = '';
-        p.style.right = '12px';
-        p.style.bottom = '12px';
-    }
-
-    function updatePill() {
-        var p = ensurePill();
-        var c = currentCrime();
+    function compactStatusParts() {
         var parts = [];
 
-        if (c === 'Pickpocketing') parts.push('PP ' + (foreground() ? 'armed' : 'paused'));
-        else if (c === 'Shoplifting') parts.push('SL page ' + (foreground() ? 'armed' : 'paused'));
-        else if (c === 'Search for Cash') parts.push('SFC page ' + (foreground() ? 'armed' : 'paused'));
-
         if (!getKey()) {
-            parts.push('API setup');
-            p.classList.add('warn');
+            parts.push('SETUP');
         } else {
-            var hasError = !!apiLastError || !!sfcLastError;
-
             if (apiProfile) {
                 var slRemain = Math.max(0, (apiProfile.total || 58) - (apiProfile.completedCount || 0));
-                parts.push('SL ' + slRemain + ' missing');
+                parts.push('SL ' + slRemain);
             } else {
-                parts.push('SL connecting');
+                parts.push('SL …');
             }
 
             if (sfcProfile) {
                 var sfcRemain = Math.max(0, (sfcProfile.total || 34) - (sfcProfile.completedCount || 0));
-                parts.push('SFC ' + sfcRemain + ' missing');
+                parts.push(sfcRemain === 0 ? 'SFC ✓' : 'SFC ' + sfcRemain);
             } else {
-                parts.push('SFC connecting');
+                parts.push('SFC …');
+            }
+        }
+
+        if (currentCrime() === 'Pickpocketing') {
+            parts.push(foreground() ? 'PP ●' : 'PP ‖');
+        }
+
+        return parts;
+    }
+
+    function updateStatusUi() {
+        var ui = ensureStatusUi();
+        if (!ui) return;
+
+        var ready = Date.now() < statusAlertUntil;
+        var hasError = !!apiLastError || !!sfcLastError;
+
+        if (ui.id === PREFIX + '-sidebar-row') {
+            var name = ui.querySelector('.tcuw-side-name');
+            var value = ui.querySelector('.tcuw-side-value');
+
+            if (ready) {
+                if (name) name.textContent = 'Unique:';
+                if (value) value.textContent = '★ READY';
+            } else {
+                if (name) name.textContent = 'Uniques:';
+                if (value) value.textContent = compactStatusParts().join(' · ');
             }
 
-            p.classList.toggle('warn', hasError);
+            ui.classList.toggle('ready', ready);
+            ui.classList.toggle('warn', !ready && (hasError || !getKey()));
+            ui.title = ready && statusAlertLabel
+                ? statusAlertLabel + ' — click for settings'
+                : 'Torn Crime Unique Watcher — click for settings';
+        } else {
+            ui.classList.toggle('ready', ready);
+            ui.classList.toggle('warn', !ready && (hasError || !getKey()));
+            ui.textContent = ready ? '!' : '★';
         }
+    }
 
-        parts.push(soundOn ? '🔊 ' + Math.round(volume * 100) + '%' : '🔇');
+    function setStatusAlert(title, detail) {
+        statusAlertUntil = Date.now() + 12000;
+        statusAlertLabel = clean(title + ' — ' + detail);
+        updateStatusUi();
 
-        var label = document.getElementById(PREFIX + '-pill-label');
-        var soundBtn = document.getElementById(PREFIX + '-pill-sound');
-
-        if (label) {
-            label.textContent = pillMinimized ? '★' : '★ ' + parts.join(' • ');
-        }
-
-        if (soundBtn) {
-            soundBtn.textContent = soundOn ? '🔊' : '🔇';
-            soundBtn.title = soundOn ? 'Mute alerts' : 'Unmute alerts';
-        }
-
-        p.classList.toggle('mini', pillMinimized);
-        p.title = pillMinimized
-            ? 'Click to expand • Drag to move'
-            : 'Click status bar to minimize • Drag to move • Shift-click: test • Ctrl-click: volume • Alt-click: settings';
+        setTimeout(function () {
+            if (Date.now() >= statusAlertUntil) {
+                statusAlertLabel = '';
+                updateStatusUi();
+            }
+        }, 12100);
     }
 
     function cycleVolume() {
@@ -525,6 +471,7 @@
 
     function alertUser(title, detail, forceSound, allowBackground) {
         if (!allowBackground && !foreground()) return;
+        setStatusAlert(title, detail);
         beep(!!forceSound, !!allowBackground);
         if (document.visibilityState === 'visible') {
             flash();
@@ -569,6 +516,30 @@
             poll.appendChild(o);
         });
 
+        var soundLabel = document.createElement('label');
+        soundLabel.textContent = 'Alert sound';
+        var soundSelect = document.createElement('select');
+        soundSelect.id = PREFIX + '-sound-select';
+        [['1','Enabled'],['0','Muted']].forEach(function (entry) {
+            var o = document.createElement('option');
+            o.value = entry[0];
+            o.textContent = entry[1];
+            if ((soundOn ? '1' : '0') === entry[0]) o.selected = true;
+            soundSelect.appendChild(o);
+        });
+
+        var volumeLabel = document.createElement('label');
+        volumeLabel.textContent = 'Alert volume';
+        var volumeSelect = document.createElement('select');
+        volumeSelect.id = PREFIX + '-volume-select';
+        [.25,.50,.75,1].forEach(function (n) {
+            var o = document.createElement('option');
+            o.value = String(n);
+            o.textContent = Math.round(n * 100) + '%';
+            if (Math.abs(n - volume) < .01) o.selected = true;
+            volumeSelect.appendChild(o);
+        });
+
         var apiLink = document.createElement('p');
         apiLink.innerHTML = '<a href="https://www.torn.com/preferences.php#tab=api" target="_blank" rel="noopener noreferrer">Open Torn API settings</a>';
 
@@ -591,6 +562,10 @@
             localStorage.setItem(PREFIX + '-api-key', key);
             pollSeconds = parseInt(poll.value, 10);
             localStorage.setItem(PREFIX + '-poll', String(pollSeconds));
+            soundOn = soundSelect.value === '1';
+            localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
+            volume = parseFloat(volumeSelect.value);
+            localStorage.setItem(PREFIX + '-volume', String(volume));
             apiProfile = null;
             sfcProfile = null;
             apiLastError = '';
@@ -636,19 +611,27 @@
             );
         });
 
-        var resetPos = document.createElement('button');
-        resetPos.textContent = 'Reset Pill Position';
-        resetPos.addEventListener('click', function () {
-            resetPillPosition();
-            status.textContent = settingsStatusText() + '\n\nPill position reset to bottom-right.';
+        var testAlert = document.createElement('button');
+        testAlert.textContent = 'Test Alert';
+        testAlert.addEventListener('click', function () {
+            soundOn = soundSelect.value === '1';
+            localStorage.setItem(PREFIX + '-sound', soundOn ? '1' : '0');
+            volume = parseFloat(volumeSelect.value);
+            localStorage.setItem(PREFIX + '-volume', String(volume));
+            alertUser(
+                'TEST ALERT',
+                'Crime Unique Watcher notification test.',
+                true,
+                true
+            );
         });
 
         var close = document.createElement('button');
         close.textContent = 'Close';
         close.addEventListener('click', function () { back.remove(); });
 
-        row.append(save, clear, testSfc, resetPos, close);
-        modal.append(h, intro, keyLabel, keyInput, pollLabel, poll, apiLink, status, row);
+        row.append(save, clear, testAlert, testSfc, close);
+        modal.append(h, intro, keyLabel, keyInput, pollLabel, poll, soundLabel, soundSelect, volumeLabel, volumeSelect, apiLink, status, row);
         back.appendChild(modal);
         back.addEventListener('click', function (e) { if (e.target === back) back.remove(); });
         document.body.appendChild(back);
@@ -1410,9 +1393,14 @@
     window.addEventListener('blur', refreshLifecycle);
     window.addEventListener('hashchange', refreshLifecycle);
     window.addEventListener('popstate', refreshLifecycle);
-    window.addEventListener('resize', function () {
-        clampPillToViewport(document.getElementById(PREFIX + '-pill'));
+    window.addEventListener('resize', scheduleStatusUiMount);
+
+    var statusRootObserver = new MutationObserver(function () {
+        if (!document.getElementById(PREFIX + '-sidebar-row')) {
+            scheduleStatusUiMount();
+        }
     });
+    statusRootObserver.observe(document.body, {childList:true, subtree:true});
 
     setInterval(function () {
         if (location.href !== lastUrl) {
