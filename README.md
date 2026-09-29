@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.3.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.3.9.user.js)
+[Install v0.4.0](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.4.0.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -55,28 +55,43 @@ The personalized API watchers require a **Minimal Access** Torn API key.
 
 1. Install the script.
 2. Open any Torn page.
-3. Click the watcher pill if API setup is not already complete.
+3. Click the **Uniques:** row in Torn's left Information panel.
 4. Create or use a Minimal Access key in Torn's API settings.
 5. Paste it into the watcher.
 6. Choose a 15, 30, or 60 second API polling interval.
-7. Click **Save & Test API**.
+7. Set alert sound/volume if desired.
+8. Click **Save & Test API**.
 
 The key is stored only in Torn's browser localStorage and is sent only to Torn's official `api.torn.com` API.
 
 ## Controls
 
-The watcher pill is draggable and remembers its screen position.
+v0.4.0 removes the floating pill and adds the watcher directly to Torn's **Information** sidebar beneath the existing OC/Chain status area.
 
-- **Drag:** move the pill
-- **Click:** mute/unmute alerts
-- **Shift + Click:** test the normal alert sound
-- **Ctrl + Click:** cycle volume through 25%, 50%, 75%, and 100%
-- **Alt + Click:** open API settings
+The row looks roughly like:
 
-The settings window also includes:
+`Uniques:  SL 5 · SFC ✓`
 
-- **Test SFC Alert** — simulates a Search for Cash notification even if you have all SFC uniques
-- **Reset Pill Position** — returns the pill to the bottom-right
+On the Pickpocketing page it can also show:
+
+`Uniques:  SL 5 · SFC ✓ · PP ●`
+
+Click the **Uniques:** row to open settings.
+
+When an alert fires, the row temporarily changes to:
+
+`Unique:  ★ READY`
+
+The settings window includes:
+
+- API key and polling interval
+- sound enabled/muted
+- 25%, 50%, 75%, or 100% alert volume
+- **Test Alert**
+- **Test SFC Alert**
+- the Shoplifting `Watcher thinks you are missing:` diagnostic
+
+If Torn's Information sidebar is unavailable on a narrow/mobile layout, the script shows a small fallback `★` button so settings remain accessible.
 
 ## Search for Cash test behavior
 
@@ -108,7 +123,7 @@ The script:
 
 ## Current version
 
-**v0.3.9**
+**v0.4.0**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -132,6 +147,8 @@ v0.3.8 fixes the Jewelry Store reward matcher for Torn's 2024 item rename from `
 
 
 v0.3.9 fixes the Jewelry Store `Diamond Bladed Knife` window. The watcher previously checked only for the guard being on break; it now also requires the cameras to still be recording before alerting.
+
+v0.4.0 replaces the floating/draggable pill with a native-looking **Uniques:** status row inside Torn's left Information panel, positioned after the OC/Chain area. Clicking the row opens settings, sound/volume controls now live inside settings, and active alerts temporarily change the sidebar status to **★ READY**. A small fallback button remains available when the sidebar cannot be mounted on narrow/mobile layouts.
 
 ## Disclaimer
 
