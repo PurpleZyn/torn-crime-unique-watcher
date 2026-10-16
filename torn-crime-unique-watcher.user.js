@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.4.2
+// @version      0.4.3
 // @description  Native-sidebar crime unique watcher for Shoplifting, Search for Cash, and Pickpocketing.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -276,15 +276,15 @@
         var t = String(title || '').toLowerCase();
 
         if (t.indexOf('shoplifting') !== -1) {
-            return 'https://www.torn.com/loader.php?sid=crimes#/shoplifting';
+            return 'https://www.torn.com/page.php?sid=crimes#/shoplifting';
         }
 
         if (t.indexOf('search for cash') !== -1) {
-            return 'https://www.torn.com/loader.php?sid=crimes#/searchforcash';
+            return 'https://www.torn.com/page.php?sid=crimes#/searchforcash';
         }
 
         if (t.indexOf('pickpocket') !== -1) {
-            return 'https://www.torn.com/loader.php?sid=crimes#/pickpocketing';
+            return 'https://www.torn.com/page.php?sid=crimes#/pickpocketing';
         }
 
         return '';
