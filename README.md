@@ -45,7 +45,7 @@ This live-page watcher also works on Search for Cash and Shoplifting when those 
 
 ### Tampermonkey
 
-[Install v0.4.2](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.4.2.user.js)
+[Install v0.4.3](https://raw.githubusercontent.com/PurpleZyn/torn-crime-unique-watcher/main/torn-crime-unique-watcher-v0.4.3.user.js)
 
 The versioned installer avoids stale GitHub raw-file caching. Future update metadata still points at the normal stable userscript path.
 
@@ -123,7 +123,7 @@ The script:
 
 ## Current version
 
-**v0.4.2**
+**v0.4.3**
 
 v0.3.2 adds Search for Cash API monitoring, personalized SFC completion filtering, Search for Cash live-star detection, and a dedicated SFC test-alert button. It preserves the draggable pill, Shoplifting API watcher, and Pickpocketing live watcher from v0.2.x.
 
@@ -153,6 +153,8 @@ v0.4.0 replaces the floating/draggable pill with a native-looking **Uniques:** s
 v0.4.1 fixes a regression introduced by the v0.4.0 sidebar rewrite. Several old `ensurePill()` / `updatePill()` calls were left behind after the floating pill was removed, causing startup/settings actions to stop with a JavaScript error. All stale pill references are now removed and the native sidebar UI/API sync path uses `ensureStatusUi()` / `updateStatusUi()` consistently.
 
 v0.4.2 makes the native sidebar alert actionable. During the temporary **★ READY** state, clicking the **Uniques:** row now opens the crime page that triggered the alert: Shoplifting, Search for Cash, or Pickpocketing. When no alert is active, clicking the row still opens watcher settings.
+
+v0.4.3 fixes READY-state navigation after Torn retired the old `loader.php?sid=crimes` endpoint. Shoplifting, Search for Cash, and Pickpocketing READY clicks now use the current `page.php?sid=crimes#/...` routes.
 
 ## Disclaimer
 
