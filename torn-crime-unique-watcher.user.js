@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Crime Unique Watcher
 // @namespace    https://www.torn.com/
-// @version      0.4.1
+// @version      0.4.2
 // @description  Native-sidebar crime unique watcher for Shoplifting, Search for Cash, and Pickpocketing.
 // @author       PurpleZyn
 // @homepageURL  https://github.com/PurpleZyn/torn-crime-unique-watcher
@@ -48,6 +48,7 @@
     var statusMountTimer = null;
     var statusAlertUntil = 0;
     var statusAlertLabel = '';
+    var statusAlertUrl = '';
     var pageActionGraceUntil = 0;
 
     /*
@@ -271,6 +272,33 @@
         return best;
     }
 
+    function crimeUrlForAlert(title) {
+        var t = String(title || '').toLowerCase();
+
+        if (t.indexOf('shoplifting') !== -1) {
+            return 'https://www.torn.com/loader.php?sid=crimes#/shoplifting';
+        }
+
+        if (t.indexOf('search for cash') !== -1) {
+            return 'https://www.torn.com/loader.php?sid=crimes#/searchforcash';
+        }
+
+        if (t.indexOf('pickpocket') !== -1) {
+            return 'https://www.torn.com/loader.php?sid=crimes#/pickpocketing';
+        }
+
+        return '';
+    }
+
+    function openWatcherOrActiveCrime() {
+        if (Date.now() < statusAlertUntil && statusAlertUrl) {
+            window.location.href = statusAlertUrl;
+            return;
+        }
+
+        openSettings();
+    }
+
     function ensureStatusUi() {
         addStyle();
 
@@ -294,7 +322,7 @@
             row.append(name, value);
             row.addEventListener('click', function () {
                 primeAudio();
-                openSettings();
+                openWatcherOrActiveCrime();
             });
 
             anchor.insertAdjacentElement('afterend', row);
@@ -315,7 +343,7 @@
             fallback.title = 'Torn Crime Unique Watcher — click for settings';
             fallback.addEventListener('click', function () {
                 primeAudio();
-                openSettings();
+                openWatcherOrActiveCrime();
             });
             document.body.appendChild(fallback);
         }
@@ -383,7 +411,7 @@
             ui.classList.toggle('ready', ready);
             ui.classList.toggle('warn', !ready && (hasError || !getKey()));
             ui.title = ready && statusAlertLabel
-                ? statusAlertLabel + ' — click for settings'
+                ? statusAlertLabel + (statusAlertUrl ? ' — click to open crime' : ' — click for settings')
                 : 'Torn Crime Unique Watcher — click for settings';
         } else {
             ui.classList.toggle('ready', ready);
@@ -395,11 +423,13 @@
     function setStatusAlert(title, detail) {
         statusAlertUntil = Date.now() + 12000;
         statusAlertLabel = clean(title + ' — ' + detail);
+        statusAlertUrl = crimeUrlForAlert(title);
         updateStatusUi();
 
         setTimeout(function () {
             if (Date.now() >= statusAlertUntil) {
                 statusAlertLabel = '';
+                statusAlertUrl = '';
                 updateStatusUi();
             }
         }, 12100);
